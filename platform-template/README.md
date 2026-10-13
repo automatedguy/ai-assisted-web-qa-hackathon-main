@@ -1,61 +1,77 @@
-# QA Platform — Starter Scaffold
+# QA Platform
 
-The initial platform is a TypeScript and Express app. It provides a small
-dashboard, a same-origin crawler capped at 50 pages, a deterministic checker
-for broken same-origin links, and a button for a short OpenAI API connection
-check. Issues can be marked verified, dismissed, or escalated; review state is
-currently held in memory and resets when the server restarts. Build the
-remaining checkers and durable issue store here, keeping the contract below
-so organizers can swap in the demo site and linguistic asset without code
-changes.
+TypeScript / Express audit platform with a coordinator, an OpenAI Language
+agent, and a deterministic Links worker. This is the first architecture
+milestone: two categories are available, with six still to implement.
 
-## Local Development
+## Run locally
 
-From this directory, run `npm install`, then `npm run dev`. The development
-script reads `OPENAI_API_KEY` and `OPENAI_MODEL` from the repository-root
-`.env` file. Open `http://localhost:3000`; clicking **Test OpenAI connection**
-makes a short billable API request. `npm run typecheck` checks TypeScript.
+From `platform-template/`, run `npm install` and `npm run dev`, then open
+http://localhost:3000. The development script loads the repository-root `.env`.
+The practice site must be running at `SITE_URL` (default http://localhost:8080).
 
-To run the site and platform together, stop any separately run site container
-that already owns port `8080`, then run `docker compose up --build` from the
-repository root. Compose passes the root `.env` values into the platform.
-Never commit `.env` or expose its key in browser code.
+- **Run audit** loads the YAML profile, crawls the site, and dispatches workers.
+  Page text and relevant profile values are sent to OpenAI; API charges apply.
+- **Crawl and check links only** runs the existing deterministic check without
+  model requests.
+- Review findings by category and mark them verified, dismissed, or escalated.
+  Review actions become available after the audit finishes.
+- The progress table shows worker status, model, attempts, duration, findings,
+  and reported input/output token counts.
 
-## Contract
+`npm run typecheck` checks TypeScript. `npm test` runs integration checks with
+an isolated local website and simulated OpenAI API; it does not load `.env`
+or contact OpenAI. `docker compose up --build` from the repository root starts
+both services; free ports 8080 and 3000 first if already running separately.
 
-**Inputs your container receives** (set in `docker-compose.yml` at the repo root):
-- `SITE_URL` — base URL of the site under test (e.g. `http://site-under-test`)
-- `LINGUISTIC_ASSET_PATH` — path to the linguistic asset YAML, mounted read-only at `/data/linguistic-assets/...`
-- Reference source content (for translation-quality checks), mounted read-only at `/data/reference-content/*.md`
+## Configuration
 
-**What your platform must do:**
-1. Crawl or fetch the pages of the site at `SITE_URL`.
-2. Run checks across all categories in `docs/CHECK_CATALOG.md` using the linguistic asset as ground truth for "what correct looks like."
-3. Produce issues conforming to `docs/ISSUE_SCHEMA.json`.
-4. Serve a review dashboard on port `3000` where a human can see every check performed, filter/browse issues, and mark each one `verified`, `dismissed`, or `escalated`.
-5. Log what ran: which agent, on what input, how long it took, and (if you're tracking it) token/cost usage.
+| Variable | Purpose |
+|---|---|
+| `OPENAI_API_KEY` | Server-side credential; keep it in ignored `.env` |
+| `OPENAI_MODEL` | Model supporting Responses structured outputs |
+| `SITE_URL` | Site to crawl |
+| `LINGUISTIC_ASSET_PATH` | YAML profile; defaults to the supplied local practice profile |
+| `ISSUE_SCHEMA_PATH` | Issue JSON Schema; defaults to `docs/ISSUE_SCHEMA.json` locally |
+| `OPENAI_INPUT_USD_PER_MILLION` | Optional input token rate for the configured model |
+| `OPENAI_OUTPUT_USD_PER_MILLION` | Optional output token rate for the configured model |
 
-**What you're free to design yourself:**
-- Language, framework, storage, agent framework or none at all.
-- How you crawl the site (headless browser, static HTML parse, etc.) — note the site includes an embedded video with a caption track, so plan for that if you want the media checks working.
-- Prompt design, model choice per agent, orchestration pattern.
-- Dashboard UI — a plain web page is fine.
+Set both rates to enable USD estimates. These use reported token counts at the
+configured rates, without cached-token discounts; they are not billing totals.
+Cost remains unavailable when rates or request usage are unknown. Docker
+Compose supplies mounted profile/schema paths and passes the rates through.
+Reference files remain mounted at `/data/reference-content` for the future
+Translation agent.
 
-## Suggested (not required) folder layout
+## Architecture
 
-```
-src/
-  orchestrator/   # coordinates the checker agents, aggregates results
-  agents/         # one module per check category, or however you split it
-  dashboard/      # the review UI
-```
+`POST /api/audits` starts a background run (202); concurrent run requests get
+409. `GET /api/audits/latest` exposes the current run for dashboard polling.
+The coordinator in `src/orchestrator/audit.ts` loads configuration, crawls once,
+and schedules at most two workers concurrently. Agent modules implement the
+shared contract in `src/agents/types.ts`; adding a module to the registry
+exposes its category and dispatch scope.
 
-These three folders exist as placeholders — delete, rename, or restructure
-freely.
+- Links: checks fetched same-origin destinations for HTTP errors.
+- Language: one request per successful HTML page, using the YAML target locale
+  and glossary. Structured findings must contain exact evidence from that page.
+- All accepted issues are validated against the supplied issue schema and
+  deduplicated by stable ID. Matching findings retain their previous review
+  status within the current server session.
+- Transient model errors get one retry; each attempt has a 60-second timeout.
+  Worker failures remain visible and do not cancel other workers.
+- Worker completion events are also written as JSON to server logs.
 
-## At demo time
+## Current limits and next milestones
 
-Organizers will stop the `site-under-test` container and start a different
-one (unseen content, unseen linguistic asset, same shape). Your
-`qa-platform` container should not need code changes — just re-point
-`SITE_URL` / `LINGUISTIC_ASSET_PATH` and re-run.
+Audit results and review decisions are in memory; restarting clears them.
+Only the latest run is retained. Durable history and review audit trails are
+still pending. Overall runs are labeled **partial** while any category is
+unimplemented, a worker fails, or crawl coverage is incomplete.
+
+Locale/Formatting, Brand/Terminology, Translation, and Media agents remain to
+implement. Links currently covers fetched same-origin HTTP errors only;
+wrong-locale links and anchor/destination meaning are pending. Language skips
+non-success responses, and pages over 24,000 characters fail visibly until
+chunking is added. The crawler caps visits at 50. Inputs must generalize to
+unseen sites and profiles; profile-specific strings must never be hardcoded.

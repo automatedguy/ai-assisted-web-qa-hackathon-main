@@ -15,11 +15,15 @@ services:
     environment:
       SITE_URL: http://site-under-test
       LINGUISTIC_ASSET_PATH: /data/linguistic-assets/practice-profile.yaml
+      ISSUE_SCHEMA_PATH: /data/docs/ISSUE_SCHEMA.json
+      OPENAI_INPUT_USD_PER_MILLION: ${OPENAI_INPUT_USD_PER_MILLION:-}
+      OPENAI_OUTPUT_USD_PER_MILLION: ${OPENAI_OUTPUT_USD_PER_MILLION:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-6-astra}
     volumes:
       - ./linguistic-assets:/data/linguistic-assets:ro
       - ./reference-content:/data/reference-content:ro
+      - ./docs:/data/docs:ro
     networks: [qa-net]
 
 networks:

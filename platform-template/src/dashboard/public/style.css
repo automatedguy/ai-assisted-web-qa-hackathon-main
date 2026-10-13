@@ -1,0 +1,14 @@
+body { margin: 0; font-family: system-ui, sans-serif; color: #17243a; background: #f5f7fb; }
+main { max-width: 1120px; margin: 32px auto; padding: 0 24px; }
+section, details { margin: 24px 0; padding: 20px; background: white; border: 1px solid #d9e0eb; border-radius: 10px; }
+h1, h2 { margin-top: 0; } h2 { font-size: 1.25rem; }
+button, select { padding: 9px 14px; margin: 4px; font: inherit; border: 1px solid #becada; border-radius: 6px; background: white; cursor: pointer; }
+#audit { background: #245ad3; color: white; border-color: #245ad3; }
+button:disabled { opacity: .55; cursor: default; }
+.table-wrap { overflow-x: auto; } table { width: 100%; border-collapse: collapse; text-align: left; }
+th, td { padding: 10px; border-bottom: 1px solid #e5e9f0; vertical-align: top; }
+td:first-child { max-width: 320px; overflow-wrap: anywhere; }
+#issues { padding-left: 20px; } #issues li { padding: 14px 0; border-bottom: 1px solid #e5e9f0; }
+#issues p, #message { overflow-wrap: anywhere; } #coverage { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; list-style: none; }
+#coverage li { padding: 6px 10px; background: #eef2f8; border-radius: 5px; font-size: .85rem; }
+a { color: #245ad3; } pre { white-space: pre-wrap; }

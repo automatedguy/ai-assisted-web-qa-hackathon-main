@@ -1,0 +1,26 @@
+version: "3.9"
+
+services:
+  site-under-test:
+    build: ./site-under-test
+    ports:
+      - "8080:80"
+    networks: [qa-net]
+
+  qa-platform:
+    build: ./platform-template
+    ports:
+      - "3000:3000"
+    depends_on: [site-under-test]
+    environment:
+      SITE_URL: http://site-under-test
+      LINGUISTIC_ASSET_PATH: /data/linguistic-assets/practice-profile.yaml
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-6-astra}
+    volumes:
+      - ./linguistic-assets:/data/linguistic-assets:ro
+      - ./reference-content:/data/reference-content:ro
+    networks: [qa-net]
+
+networks:
+  qa-net: {}

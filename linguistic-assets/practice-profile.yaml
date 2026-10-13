@@ -1,0 +1,40 @@
+# Linguistic asset — practice site
+# This describes the expected editorial/brand/locale conditions for the
+# site at http://site-under-test. Treat every value here as configuration —
+# do not hardcode against these specific strings; the demo site will ship
+# with a different profile.
+
+brand_voice:
+  tone: "confident, warm, concise"
+  style_rules:
+    - "Use active voice"
+    - "Prefer sentences under ~25 words"
+    - "Avoid slang and casual filler words"
+  forbidden_terms:
+    - "barato"
+    - "tío"
+
+locale:
+  target_locale: "es-ES"
+  source_locale: "en-US"
+  date_format: "DD/MM/YYYY"
+  currency_format: "EUR, symbol after amount, comma decimal (e.g. 19,99 €)"
+  measurement_units: "metric"
+
+glossary:
+  do_not_translate:
+    - "Nimbus"
+    - "NimbusSync"
+    - "NimbusBox"
+  preferred_terms:
+    "cloud storage": "almacenamiento en la nube"
+  banned_terms:
+    - "barato"
+
+reference_content:
+  - page: "/index.html"
+    source_text_path: "reference-content/home.en.md"
+  - page: "/about.html"
+    source_text_path: "reference-content/about.en.md"
+  - page: "/pricing.html"
+    source_text_path: "reference-content/pricing.en.md"

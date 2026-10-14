@@ -4,11 +4,14 @@ import { loadProfile, loadIssueValidator } from "../config.js";
 import { categories, type QaIssue } from "../issues.js";
 import { checkBrokenLinks } from "../agents/links.js";
 import { languageAgent } from "../agents/language.js";
+import { localeFormattingAgent } from "../agents/locale-formatting.js";
+import { WorkerFailure } from "../agents/types.js";
 import type { Agent, WorkerRun } from "../agents/types.js";
 
 const agents: Agent[] = [
-  { id: "links", category: "links", scope: "site", execute: async ({ crawl }) => checkBrokenLinks(crawl) },
+  { id: "links", categories: ["links"], scope: "site", execute: async ({ crawl }) => checkBrokenLinks(crawl) },
   languageAgent,
+  localeFormattingAgent,
 ];
 export type Audit = {
   id: string; status: "running" | "completed" | "partial" | "failed";
@@ -20,7 +23,7 @@ export type Audit = {
 export function createAudit(): Audit {
   return {
     id: randomUUID(), status: "running", phase: "Loading profile", startedAt: new Date().toISOString(), durationMs: 0,
-    workers: [], issues: [], coverage: categories.map(category => ({ category, implemented: agents.some(agent => agent.category === category) })),
+    workers: [], issues: [], coverage: categories.map(category => ({ category, implemented: agents.some(agent => agent.categories.includes(category)) })),
   };
 }
 export async function executeAudit(audit: Audit, siteUrl: string, model: string, previous: QaIssue[]) {
@@ -36,7 +39,7 @@ export async function executeAudit(audit: Audit, siteUrl: string, model: string,
     audit.phase = "Running workers";
     const tasks = agents.flatMap(agent => (agent.scope === "site" ? [undefined] : pages).map(page => {
       const report: WorkerRun = {
-        id: randomUUID(), agent: agent.id, category: agent.category, pageUrl: page?.url,
+        id: randomUUID(), agent: agent.id, categories: agent.categories, pageUrl: page?.url,
         status: "queued", attempts: 0, durationMs: 0, issueCount: 0,
         inputTokens: 0, outputTokens: 0, estimatedCostUsd: agent.id === "links" ? 0 : null, usageComplete: true,
       };
@@ -44,19 +47,27 @@ export async function executeAudit(audit: Audit, siteUrl: string, model: string,
       return async () => {
         const workerStart = Date.now();
         report.status = "running"; report.attempts = 1;
-        try {
-          const issues = await agent.execute({ crawl, page, profile, model, report });
-          if (issues.some(issue => !validateIssue(issue) || issue.category !== agent.category)) throw new Error("Worker findings failed issue schema validation.");
+        const accept = (issues: QaIssue[]) => {
+          if (issues.some(issue => !validateIssue(issue) || !agent.categories.includes(issue.category))) throw new Error("Worker findings failed issue schema validation.");
           for (const issue of issues) {
             if (audit.issues.some(existing => existing.id === issue.id)) continue;
             issue.status = previous.find(existing => existing.id === issue.id)?.status ?? "new";
             audit.issues.push(issue);
             report.issueCount++;
           }
-          report.status = "completed";
+        };
+        try {
+          const issues = await agent.execute({ crawl, page, profile, model, report });
+          accept(issues);
+          // Agents can explicitly skip when their optional profile rules are absent.
+          if ((report as WorkerRun).status !== "skipped") report.status = "completed";
         } catch (error) {
           report.status = "failed";
           report.message = error instanceof Error ? error.message : "Worker failed.";
+          if (error instanceof WorkerFailure) {
+            try { accept(error.issues); }
+            catch { report.message = "Worker findings failed issue schema validation."; }
+          }
         } finally {
           report.durationMs = Date.now() - workerStart;
           console.log(JSON.stringify({ event: "worker_finished", auditId: audit.id, ...report }));

@@ -74,6 +74,11 @@ export async function crawlSite(rawStartUrl: string): Promise<CrawlResult> {
       const html = await response.text();
       const $ = cheerio.load(html);
       $("script, style, noscript, svg").remove();
+      // text() alone joins adjacent blocks (e.g. <dt>Miles</dt><dd>de equipos</dd>).
+      // Preserve inline word fragments but separate rendered blocks and line breaks.
+      $("br, hr").replaceWith(" ");
+      $("address, article, aside, blockquote, dd, details, div, dl, dt, fieldset, figcaption, figure, footer, form, h1, h2, h3, h4, h5, h6, header, li, main, nav, ol, p, pre, section, summary, table, tbody, td, th, thead, tr, ul")
+        .prepend(" ").append(" ");
 
       const links = $("a[href]")
         .toArray()

@@ -3,7 +3,7 @@ import type { Profile } from "../config.js";
 import type { QaIssue } from "../issues.js";
 
 export type WorkerRun = {
-  id: string; agent: string; category: QaIssue["category"]; pageUrl?: string;
+  id: string; agent: string; categories: QaIssue["category"][]; pageUrl?: string;
   status: "queued" | "running" | "completed" | "failed" | "skipped";
   attempts: number; durationMs: number; issueCount: number;
   inputTokens: number; outputTokens: number; estimatedCostUsd: number | null;
@@ -14,6 +14,11 @@ export type AgentContext = {
   report: WorkerRun;
 };
 export type Agent = {
-  id: string; category: QaIssue["category"]; scope: "site" | "page";
+  id: string; categories: QaIssue["category"][]; scope: "site" | "page";
   execute(context: AgentContext): Promise<QaIssue[]>;
 };
+
+// Keep validated deterministic evidence even when a later model step fails.
+export class WorkerFailure extends Error {
+  constructor(message: string, readonly issues: QaIssue[]) { super(message); }
+}

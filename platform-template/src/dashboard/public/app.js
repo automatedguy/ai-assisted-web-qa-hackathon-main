@@ -76,7 +76,7 @@ function renderAudit(audit) {
     const row = document.createElement('tr');
     for (const text of [worker.agent + (worker.pageUrl ? ' · ' + worker.pageUrl : ' · site'), worker.status, worker.attempts,
       (worker.durationMs / 1000).toFixed(1) + 's', worker.issueCount, worker.inputTokens + ' / ' + worker.outputTokens,
-      worker.message || worker.model || 'Deterministic HTTP checks']) {
+      (worker.categories || []).join(', ') + ' · ' + (worker.message || worker.model || 'Deterministic checks')]) {
       const cell = document.createElement('td'); cell.textContent = text; row.append(cell);
     }
     $('#workers').append(row);
@@ -113,7 +113,7 @@ crawlButton.addEventListener('click', async () => {
   busy(true); $('#message').textContent = 'Crawling pages and checking links…';
   try {
     const crawl = await api('/api/crawl', { method: 'POST' }); renderPages(crawl); issues = crawl.issues;
-    $('#audit-status').textContent = 'Crawl and links only. Language agent was not run.';
+    $('#audit-status').textContent = 'Crawl and links only. Language and Locale/Formatting agents were not run.';
     $('#workers').replaceChildren(); $('#coverage').replaceChildren(); $('#usage').textContent = '';
     $('#message').textContent = '';
   } catch (error) { $('#message').textContent = error.message; }

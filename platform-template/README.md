@@ -1,8 +1,8 @@
 # QA Platform
 
-TypeScript / Express audit platform with a coordinator, an OpenAI Language
-agent, and a deterministic Links worker. This is the first architecture
-milestone: two categories are available, with six still to implement.
+TypeScript / Express audit platform with a coordinator, OpenAI Language and
+Locale/Formatting agents, and a deterministic Links worker. Four categories
+are available: spelling/grammar, links, formatting, and locale rules.
 
 ## Run locally
 
@@ -16,7 +16,7 @@ The practice site must be running at `SITE_URL` (default http://localhost:8080).
   model requests.
 - Review findings by category and mark them verified, dismissed, or escalated.
   Review actions become available after the audit finishes.
-- The progress table shows worker status, model, attempts, duration, findings,
+- The progress table shows worker categories, status, model, attempts, duration, findings,
   and reported input/output token counts.
 
 `npm run typecheck` checks TypeScript. `npm test` runs integration checks with
@@ -50,17 +50,56 @@ Translation agent.
 The coordinator in `src/orchestrator/audit.ts` loads configuration, crawls once,
 and schedules at most two workers concurrently. Agent modules implement the
 shared contract in `src/agents/types.ts`; adding a module to the registry
-exposes its category and dispatch scope.
+exposes its declared categories and dispatch scope. Each finding must belong
+to one of the worker's declared categories. Worker API reports now contain
+`categories: string[]` instead of the previous singular `category` field.
 
 - Links: checks fetched same-origin destinations for HTTP errors.
 - Language: one request per successful HTML page, using the YAML target locale
   and glossary. Structured findings must contain exact evidence from that page.
+- Locale/Formatting: deterministic numeric-date checking followed by one model
+  request per successful HTML page with explicit applicable rules. The model
+  interprets natural-language policies and context; every finding cites a
+  configured rule and exact page-text evidence. The two categories share one
+  worker and request to avoid duplicate currency/unit findings and token usage.
 - All accepted issues are validated against the supplied issue schema and
   deduplicated by stable ID. Matching findings retain their previous review
   status within the current server session.
 - Transient model errors get one retry; each attempt has a 60-second timeout.
   Worker failures remain visible and do not cancel other workers.
 - Worker completion events are also written as JSON to server logs.
+
+## Locale and formatting rules
+
+Rules are read from the YAML profile on each audit. Missing optional rules
+do not acquire defaults from `target_locale`; with no applicable rules the
+worker is visibly skipped and makes no API request.
+
+| Profile field | Check/category |
+|---|---|
+| `locale.date_format` | Date notation (`formatting`) |
+| `locale.number_format` | Explicit number separators/notation (`formatting`) |
+| `locale.currency_format` | Currency notation (`formatting`) and required currency identity (`locale_rules`) when specified |
+| `locale.currency` | Explicit required currency identity, taking precedence over identity in `currency_format` |
+| `locale.measurement_units` | Physical units/system (`locale_rules`) |
+| `locale.address_format`, `locale.phone_format` | Explicit address/phone conventions (`locale_rules`) |
+| `locale.capitalization`, `locale.capitalization_rules` | Explicit capitalization policies (`formatting`) |
+| `formatting` | Additional text-formatting policies as a string, list, or object (`formatting`) |
+
+The date tool supports `DD/MM/YYYY`, `MM/DD/YYYY`, and `YYYY/MM/DD`, with
+`/`, `-`, or `.` separators, checks calendar validity, and preserves ambiguous
+month/day meanings rather than guessing. Other date patterns are assessed by
+the model. Wrong currency identity takes precedence over notation for the
+same expression; prices are not automatically converted or relabeled. A
+currency-specific decimal rule does not create a general number policy.
+Model findings cannot override numeric dates already assessed by the tool.
+If the model step fails, valid deterministic date findings remain visible and
+the worker is marked failed. Model retry/usage reporting is shared with Language.
+
+The crawler inserts spaces at block boundaries and line breaks while retaining
+inline word fragments, preventing synthetic errors such as joined table cells
+or definition-list entries. Extracted text is still normalized, not a browser
+layout: whitespace/layout and raw HTML markup validation are not implemented.
 
 ## Current limits and next milestones
 
@@ -69,9 +108,11 @@ Only the latest run is retained. Durable history and review audit trails are
 still pending. Overall runs are labeled **partial** while any category is
 unimplemented, a worker fails, or crawl coverage is incomplete.
 
-Locale/Formatting, Brand/Terminology, Translation, and Media agents remain to
-implement. Links currently covers fetched same-origin HTTP errors only;
-wrong-locale links and anchor/destination meaning are pending. Language skips
-non-success responses, and pages over 24,000 characters fail visibly until
-chunking is added. The crawler caps visits at 50. Inputs must generalize to
+Brand/Terminology, Translation, and Media agents remain to implement. Links
+currently covers fetched same-origin HTTP errors only; wrong-locale links and
+anchor/destination meaning are pending. Page agents skip non-success responses,
+and pages over 24,000 characters fail their model step visibly until chunking
+is added. Contextual locale/formatting checks depend on model judgment and need
+human review; tests with a simulated API verify routing/validation, not live
+model accuracy. The crawler caps visits at 50. Inputs must generalize to
 unseen sites and profiles; profile-specific strings must never be hardcoded.

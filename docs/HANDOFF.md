@@ -1,7 +1,8 @@
 # Project Handoff
 
-Updated: 2026-10-13. Implementation baseline: `fbd97f9` on `main`, pushed to
-https://github.com/automatedguy/ai-assisted-web-qa-hackathon-main.
+Updated: 2026-10-14. Implementation: Locale/Formatting milestone on `main`.
+Use Git history to identify the current commit and publication status.
+Remote: https://github.com/automatedguy/ai-assisted-web-qa-hackathon-main.
 Check Git status and recent commits before continuing; this is a point-in-time snapshot.
 
 ## Objective and Constraints
@@ -23,18 +24,21 @@ The demo replaces the practice site and profile with unseen inputs, without code
 
 ## Current Implementation
 
-This is the first architecture milestone, **not the completed multi-agent system**.
-There is one model-backed Language agent and one deterministic Links worker under
-a shared coordinator. Six categories remain unimplemented.
+Four of eight categories are implemented under a shared coordinator: Language,
+Links, Formatting, and Locale Rules. Language and Locale/Formatting use specialized
+model instructions; Links and numeric-date checking are deterministic. Brand Voice,
+Terminology, Translation Quality, and Media remain unimplemented.
 
 | Component | Location and behavior |
 |---|---|
 | Server | `platform-template/src/server.ts`: Express API and static dashboard |
-| Crawler | `src/crawler/crawl.ts`: same-origin HTML extraction, up to 50 visits; normalizes `/index.html` to `/` |
+| Crawler | `src/crawler/crawl.ts`: same-origin HTML extraction with block boundaries, up to 50 visits; normalizes `/index.html` to `/` |
 | Configuration | `src/config.ts`: loads YAML on each audit, validates required target locale, preserves additional profile fields |
 | Coordinator | `src/orchestrator/audit.ts`: agent registry, site/page dispatch, concurrency of two, isolated failures, issue validation and deduplication |
-| Worker contract | `src/agents/types.ts`: agent inputs, scope, category, execution report |
+| Worker contract | `src/agents/types.ts`: agent inputs, scope, declared categories, execution report, partial-failure findings |
 | Language | `src/agents/language.ts`: Responses structured outputs for `spelling_grammar`; exact source-evidence validation |
+| Locale/Formatting | `src/agents/locale-formatting.ts`: profile-driven policies, contextual model checks and overlap suppression; `date-format.ts`: deterministic numeric dates |
+| Shared model client | `src/agents/model-check.ts`: structured outputs, retries, exact evidence, token/cost tracking |
 | Links | `src/agents/links.ts`: reports fetched same-origin destinations returning HTTP errors |
 | Issue contract | `docs/ISSUE_SCHEMA.json`, with TypeScript types in `src/issues.ts` |
 | Dashboard | `src/dashboard/public/`: audit progress, worker table, category filtering, review actions |
@@ -49,8 +53,18 @@ Paths beginning with `src/` above are relative to `platform-template/`.
 The Language agent uses the profile's target locale and glossary, one request per
 successful HTML page. It has a 60-second request timeout and one retry for transient
 failures. Every accepted audit finding passes JSON Schema validation. Evidence must
-be a nonempty exact substring of the page text. Workers report attempts, duration,
+be a nonempty exact substring of the page text. Workers now declare/report `categories: string[]` rather than a singular category.
+Workers report attempts, duration,
 findings, model, and token usage; completion events are logged as JSON.
+
+Locale/Formatting makes one additional model request per successful page with
+applicable explicit rules. Missing optional policies are not inferred from the
+target locale; the worker skips when no relevant policies exist. It checks date,
+number and currency notation, physical units, currency identity, and configured
+address/phone/capitalization rules. See the platform README for supported fields.
+Numeric date findings survive a failed model step while the worker remains failed.
+Wrong currencies/units take precedence over duplicate formatting findings for the
+same expression. No exchange rates or replacement prices are invented.
 
 ## Run and Configure
 
@@ -85,16 +99,26 @@ ChatGPT account does not change the application's `.env` API credential.
 
 ## Validation Already Performed
 
-- `npm run typecheck` passed; dashboard JavaScript syntax and Git whitespace checks passed.
-- `node --import tsx --test test/audit.test.ts` passed all six scenarios (seven TAP
-  entries including the parent): changed locale/profile, stable review status,
-  rejected fabricated evidence, clean output, transient retry, missing API key,
-  and invalid profile handling are covered across those scenarios.
-- Integration tests use a local fake website and fake OpenAI endpoint, not `.env`
-  or paid API requests. Run them with `npm test` from `platform-template/`.
-- The refreshed browser showed the new dashboard controls successfully.
-- Earlier user checks confirmed API connectivity and the practice site's broken
-  pricing link. The new Language agent's live accuracy has **not** been evaluated.
+- `npm run typecheck`, dashboard JavaScript syntax, and Git whitespace checks passed.
+- `npm test` passed all 17 TAP entries, including the two parent groups. Tests use
+  local mock website/API servers without loading `.env` or contacting OpenAI.
+- Coverage includes alternate Japanese, US, French and German profiles; numeric
+  date ambiguity and calendar validity; currency/unit category separation;
+  explicit number/address/phone/capitalization rules; skipped optional policies;
+  exact evidence and configured-rule validation; retry/usage tracking; retained
+  deterministic findings on model failure; review status preservation; and block
+  text extraction without artificial word concatenation.
+- A live practice-site audit completed on 2026-10-14 in about 18.4 seconds. All
+  seven workers completed. Seven findings were reviewed: one broken link, one
+  grammar error, one date-format error, one nonmetric weight, and three wrong
+  currency prices. No additional locale/formatting false positives were observed
+  in this smoke test. This is not a full accuracy benchmark.
+- The earlier “Milesde” finding was a crawler artifact from adjacent `dt`/`dd`
+  elements. Block-boundary spacing now prevents it, with regression coverage.
+- The running development server picked up the changes; refresh the dashboard
+  to see four available categories and the latest results. The overall audit
+  remains `partial` because four categories are unimplemented.
+- Docker Compose end-to-end validation remains pending.
 
 ## Known Limitations
 
@@ -103,26 +127,27 @@ ChatGPT account does not change the application's `.env` API credential.
 - Audits deliberately show `partial` while categories are missing, workers fail,
   or crawl coverage is incomplete.
 - Links does not yet assess external links, wrong-locale destinations, or anchor meaning.
-- Language fails visibly above 24,000 characters per page; chunking is pending.
+- Model-based page checks fail visibly above 24,000 characters; chunking is pending.
+- Contextual locale checks depend on model judgment; numeric-date recognition is
+  heuristic. Raw HTML markup, rendered layout and whitespace checks remain pending.
+- A subsequent live run returned some currency explanations/instructions in Spanish.
+  Enforcing English explanations while retaining target-language replacement text
+  needs refinement.
+- Locale/Formatting supports the explicit fields documented in the platform README;
+  unknown locale keys are preserved but do not automatically become checks.
 - Media metadata is extracted, but image/video/caption auditing is not implemented.
 - Reference Markdown is supplied/mounted but not yet consumed by a Translation agent.
 
-## Next Task: Locale and Formatting
+## Next Task: Brand and Terminology
 
-1. Implement profile-driven `locale_rules` and `formatting` checks, using relevant
-   locale fields for dates, numbers, currencies, units, and other applicable rules.
-2. Adapt the agent contract and coordinator deliberately: each registered agent
-   currently declares a **single category**, and validation enforces that category.
-   Either support multiple declared categories or register separate workers sharing
-   implementation. Update coverage reporting and tests accordingly.
-3. Keep reliable deterministic checks as tools; use specialized model reasoning
-   where context is needed. Preserve exact evidence and avoid duplicate findings
-   between the two categories. Missing optional rules must not imply hardcoded defaults.
-4. Exercise a different profile and clean/error fixtures, then check the practice
-   site and inspect findings for false positives.
+1. Implement checks driven by `brand_voice` and `glossary`, preserving original
+   evidence and target-language corrections with English explanations.
+2. Reuse the multi-category agent contract and shared model client where useful;
+   avoid duplicate issues for terms listed in multiple profile sections.
+3. Exercise alternate profiles and clean/error fixtures, then review live findings.
 
-Following milestones: Brand/Terminology, Translation, Links/Media expansion,
-durable runs and review history, and a full unseen-input demo rehearsal.
+Following milestones: Translation, Links/Media expansion, durable runs and review
+history, and a full unseen-input demo rehearsal.
 
 ## Git and Session Continuity
 

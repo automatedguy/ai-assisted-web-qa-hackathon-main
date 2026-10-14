@@ -4,6 +4,8 @@
 `language.ts` owns the Language agent instructions. `locale-formatting.ts`
 owns policy selection, contextual locale/formatting instructions and overlap
 suppression; `date-format.ts` is its deterministic numeric-date tool.
+`brand-terminology.ts` owns brand tone/style and glossary checks, assigning
+shared forbidden terms to Terminology and reporting two categories per worker.
 `model-check.ts` shares structured output, API retry, usage accounting and exact
 source-evidence validation. `links.ts` provides deterministic HTTP findings.
 The orchestrator registers and schedules agents independently.

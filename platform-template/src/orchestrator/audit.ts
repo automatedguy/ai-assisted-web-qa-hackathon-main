@@ -5,6 +5,7 @@ import { categories, type QaIssue } from "../issues.js";
 import { checkBrokenLinks } from "../agents/links.js";
 import { languageAgent } from "../agents/language.js";
 import { localeFormattingAgent } from "../agents/locale-formatting.js";
+import { brandTerminologyAgent } from "../agents/brand-terminology.js";
 import { WorkerFailure } from "../agents/types.js";
 import type { Agent, WorkerRun } from "../agents/types.js";
 
@@ -12,6 +13,7 @@ const agents: Agent[] = [
   { id: "links", categories: ["links"], scope: "site", execute: async ({ crawl }) => checkBrokenLinks(crawl) },
   languageAgent,
   localeFormattingAgent,
+  brandTerminologyAgent,
 ];
 export type Audit = {
   id: string; status: "running" | "completed" | "partial" | "failed";

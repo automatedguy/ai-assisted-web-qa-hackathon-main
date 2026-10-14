@@ -1,6 +1,6 @@
 # Project Handoff
 
-Updated: 2026-10-14. Implementation: Locale/Formatting milestone on `main`.
+Updated: 2026-10-14. Implementation: Brand/Terminology milestone on `main`.
 Use Git history to identify the current commit and publication status.
 Remote: https://github.com/automatedguy/ai-assisted-web-qa-hackathon-main.
 Check Git status and recent commits before continuing; this is a point-in-time snapshot.
@@ -24,10 +24,11 @@ The demo replaces the practice site and profile with unseen inputs, without code
 
 ## Current Implementation
 
-Four of eight categories are implemented under a shared coordinator: Language,
-Links, Formatting, and Locale Rules. Language and Locale/Formatting use specialized
-model instructions; Links and numeric-date checking are deterministic. Brand Voice,
-Terminology, Translation Quality, and Media remain unimplemented.
+Six of eight categories are implemented under a shared coordinator: Language,
+Links, Formatting, Locale Rules, Brand Voice, and Terminology. Language,
+Locale/Formatting and Brand/Terminology use specialized model instructions;
+Links and numeric-date checking are deterministic. Translation Quality and Media
+remain unimplemented.
 
 | Component | Location and behavior |
 |---|---|
@@ -38,6 +39,7 @@ Terminology, Translation Quality, and Media remain unimplemented.
 | Worker contract | `src/agents/types.ts`: agent inputs, scope, declared categories, execution report, partial-failure findings |
 | Language | `src/agents/language.ts`: Responses structured outputs for `spelling_grammar`; exact source-evidence validation |
 | Locale/Formatting | `src/agents/locale-formatting.ts`: profile-driven policies, contextual model checks and overlap suppression; `date-format.ts`: deterministic numeric dates |
+| Brand/Terminology | `src/agents/brand-terminology.ts`: profile-driven tone/style and glossary checks, shared forbidden-term ownership, stable finding IDs |
 | Shared model client | `src/agents/model-check.ts`: structured outputs, retries, exact evidence, token/cost tracking |
 | Links | `src/agents/links.ts`: reports fetched same-origin destinations returning HTTP errors |
 | Issue contract | `docs/ISSUE_SCHEMA.json`, with TypeScript types in `src/issues.ts` |
@@ -65,6 +67,14 @@ address/phone/capitalization rules. See the platform README for supported fields
 Numeric date findings survive a failed model step while the worker remains failed.
 Wrong currencies/units take precedence over duplicate formatting findings for the
 same expression. No exchange rates or replacement prices are invented.
+
+Brand/Terminology makes one additional request per successful page when supported
+`brand_voice` or `glossary` rules are present. Tone, style and brand-only forbidden
+terms are Brand Voice findings; protected names, preferred equivalents and glossary
+bans are Terminology findings. A term prohibited in both sections belongs to
+Terminology. Missing/empty rules cause a visible skip without an API request.
+Each accepted finding cites a configured rule and exact page evidence. See the
+platform README for supported fields, duplicate handling and model limitations.
 
 ## Run and Configure
 
@@ -100,7 +110,7 @@ ChatGPT account does not change the application's `.env` API credential.
 ## Validation Already Performed
 
 - `npm run typecheck`, dashboard JavaScript syntax, and Git whitespace checks passed.
-- `npm test` passed all 17 TAP entries, including the two parent groups. Tests use
+- `npm test` passed all 26 TAP entries, including parent groups. Tests use
   local mock website/API servers without loading `.env` or contacting OpenAI.
 - Coverage includes alternate Japanese, US, French and German profiles; numeric
   date ambiguity and calendar validity; currency/unit category separation;
@@ -108,6 +118,19 @@ ChatGPT account does not change the application's `.env` API credential.
   exact evidence and configured-rule validation; retry/usage tracking; retained
   deterministic findings on model failure; review status preservation; and block
   text extraction without artificial word concatenation.
+- Brand/Terminology tests additionally cover French/Japanese profiles, all six
+  supported policy fields, shared forbidden terms with Unicode/case normalization,
+  either profile section alone, clean output, skipped empty/unknown policies,
+  duplicate findings, stable review status, rule/evidence rejection, and failure
+  isolation. These use simulated responses and are not an accuracy benchmark.
+- A live six-category practice-site audit on 2026-10-14 completed all ten workers
+  in 31.4 seconds and produced 12 findings. The five new findings were two Brand
+  Voice issues (forbidden address term and casual slang) and three Terminology
+  issues (nonpreferred cloud-storage wording, a translated protected product name,
+  and an inflected banned term). Their evidence and English explanations were
+  inspected; the shared brand/glossary ban appeared once under Terminology.
+  This is a smoke test, not a full precision/recall benchmark. No review statuses
+  were changed during this check.
 - A live practice-site audit completed on 2026-10-14 in about 18.4 seconds. All
   seven workers completed. Seven findings were reviewed: one broken link, one
   grammar error, one date-format error, one nonmetric weight, and three wrong
@@ -115,9 +138,9 @@ ChatGPT account does not change the application's `.env` API credential.
   in this smoke test. This is not a full accuracy benchmark.
 - The earlier “Milesde” finding was a crawler artifact from adjacent `dt`/`dd`
   elements. Block-boundary spacing now prevents it, with regression coverage.
-- The running development server picked up the changes; refresh the dashboard
-  to see four available categories and the latest results. The overall audit
-  remains `partial` because four categories are unimplemented.
+- The dashboard derives coverage from the coordinator registry and now exposes
+  six available categories. The overall audit remains `partial` because Translation
+  and Media are unimplemented.
 - Docker Compose end-to-end validation remains pending.
 
 ## Known Limitations
@@ -138,15 +161,16 @@ ChatGPT account does not change the application's `.env` API credential.
 - Media metadata is extracted, but image/video/caption auditing is not implemented.
 - Reference Markdown is supplied/mounted but not yet consumed by a Translation agent.
 
-## Next Task: Brand and Terminology
+## Next Task: Translation Quality
 
-1. Implement checks driven by `brand_voice` and `glossary`, preserving original
-   evidence and target-language corrections with English explanations.
-2. Reuse the multi-category agent contract and shared model client where useful;
-   avoid duplicate issues for terms listed in multiple profile sections.
-3. Exercise alternate profiles and clean/error fixtures, then review live findings.
+1. Load the reference Markdown mapped to each target page by `reference_content`.
+   Support both local development paths and the read-only Docker mount.
+2. Compare target text with the source for mistranslation, omissions, additions,
+   and meaning drift, keeping findings distinct from glossary/grammar checks.
+3. Exercise alternate profiles, missing references and clean/error fixtures, then
+   review live findings with source and target evidence.
 
-Following milestones: Translation, Links/Media expansion, durable runs and review
+Following milestones: Links/Media expansion, durable runs and review
 history, and a full unseen-input demo rehearsal.
 
 ## Git and Session Continuity

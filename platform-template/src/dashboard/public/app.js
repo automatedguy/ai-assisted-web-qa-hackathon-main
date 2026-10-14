@@ -113,7 +113,7 @@ crawlButton.addEventListener('click', async () => {
   busy(true); $('#message').textContent = 'Crawling pages and checking links…';
   try {
     const crawl = await api('/api/crawl', { method: 'POST' }); renderPages(crawl); issues = crawl.issues;
-    $('#audit-status').textContent = 'Crawl and links only. Language and Locale/Formatting agents were not run.';
+    $('#audit-status').textContent = 'Crawl and links only. Language, Locale/Formatting, and Brand/Terminology agents were not run.';
     $('#workers').replaceChildren(); $('#coverage').replaceChildren(); $('#usage').textContent = '';
     $('#message').textContent = '';
   } catch (error) { $('#message').textContent = error.message; }

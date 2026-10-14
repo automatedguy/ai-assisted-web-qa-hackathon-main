@@ -1,8 +1,9 @@
 # QA Platform
 
-TypeScript / Express audit platform with a coordinator, OpenAI Language and
-Locale/Formatting agents, and a deterministic Links worker. Four categories
-are available: spelling/grammar, links, formatting, and locale rules.
+TypeScript / Express audit platform with a coordinator, OpenAI Language,
+Locale/Formatting and Brand/Terminology agents, and a deterministic Links worker.
+Six categories are available: spelling/grammar, links, formatting, locale rules,
+brand voice, and terminology.
 
 ## Run locally
 
@@ -62,6 +63,9 @@ to one of the worker's declared categories. Worker API reports now contain
   interprets natural-language policies and context; every finding cites a
   configured rule and exact page-text evidence. The two categories share one
   worker and request to avoid duplicate currency/unit findings and token usage.
+- Brand/Terminology: one model request per successful HTML page with supported
+  brand or glossary policies. Tone/style and terminology findings are categorized
+  separately, with glossary ownership of shared forbidden terms.
 - All accepted issues are validated against the supplied issue schema and
   deduplicated by stable ID. Matching findings retain their previous review
   status within the current server session.
@@ -101,6 +105,39 @@ inline word fragments, preventing synthetic errors such as joined table cells
 or definition-list entries. Extracted text is still normalized, not a browser
 layout: whitespace/layout and raw HTML markup validation are not implemented.
 
+## Brand voice and terminology rules
+
+`brand-terminology.ts` reads these optional fields on each audit:
+
+| Profile field | Check/category |
+|---|---|
+| `brand_voice.tone` | Tone described by a string (`brand_voice`) |
+| `brand_voice.style_rules` | List of editorial rules (`brand_voice`) |
+| `brand_voice.forbidden_terms` | List of prohibited brand terms (`brand_voice`) |
+| `glossary.banned_terms` | List of prohibited terms (`terminology`) |
+| `glossary.do_not_translate` | List of protected names (`terminology`) |
+| `glossary.preferred_terms` | Mapping of source concepts to approved target-language terms (`terminology`) |
+
+List entries must be nonempty strings; preferred-term keys and values must be
+nonempty strings. Unknown fields are preserved by configuration loading but do
+not become checks. With no supported nonempty rules, the worker skips without
+an API request. Either section can be used on its own.
+
+Terms present in both forbidden lists are assigned to the glossary rule, using
+case-insensitive Unicode normalization for that comparison. The model is told
+not to report lexical violations again as tone/style. Duplicate findings with
+the same category and exact evidence receive one stable ID; matching findings
+retain their review status on subsequent runs in the same server session.
+
+The model checks terms in context, including translated protected names and
+incorrect equivalents of glossary concepts. It is instructed to respect clean
+content, quotations, exceptions, and absent glossary concepts, and to avoid
+incidental substring matches or invented requirements. Each finding must cite
+a configured rule and exact page evidence. Descriptions and explanatory prose
+are requested in English; evidence and quoted corrections retain their original
+or target language. Contextual accuracy and language compliance still require
+human review; mock API tests validate the workflow, not model judgment.
+
 ## Current limits and next milestones
 
 Audit results and review decisions are in memory; restarting clears them.
@@ -108,7 +145,7 @@ Only the latest run is retained. Durable history and review audit trails are
 still pending. Overall runs are labeled **partial** while any category is
 unimplemented, a worker fails, or crawl coverage is incomplete.
 
-Brand/Terminology, Translation, and Media agents remain to implement. Links
+Translation and Media agents remain to implement. Links
 currently covers fetched same-origin HTTP errors only; wrong-locale links and
 anchor/destination meaning are pending. Page agents skip non-success responses,
 and pages over 24,000 characters fail their model step visibly until chunking

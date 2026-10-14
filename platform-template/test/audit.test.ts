@@ -14,9 +14,17 @@ test('audit workflow with an unseen profile and simulated model', async t => {
   let receivedLocale = '';
   const server = createServer(async (request, response) => {
     if (request.url === '/v1/responses') {
-      calls++;
       let body = '';
       for await (const chunk of request) body += chunk;
+      if (JSON.parse(body).text.format.name === 'brand_terminology_findings') {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({
+          id: 'resp_brand', object: 'response', status: 'completed', model: 'mock-model',
+          output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '{"issues":[]}', annotations: [] }] }],
+          usage: { input_tokens: 100, output_tokens: 20, total_tokens: 120 },
+        })); return;
+      }
+      calls++; // Language calls; Brand/Terminology has its own fixtures.
       receivedLocale = JSON.parse(JSON.parse(body).input).targetLocale;
       if (mode === 'retry' && calls === 1) {
         response.writeHead(429, { 'content-type': 'application/json' });
@@ -56,13 +64,13 @@ test('audit workflow with an unseen profile and simulated model', async t => {
     await t.test('runs configured workers, validates findings, tracks usage, preserves review status', async () => {
       await reset(); const audit = createAudit();
       await executeAudit(audit, origin, 'mock-model', []);
-      assert.equal(audit.status, 'partial'); // Four categories are not implemented.
+      assert.equal(audit.status, 'partial'); // Translation and Media are not implemented.
       assert.equal(receivedLocale, 'fr-FR');
-      assert.equal(audit.workers.length, 3); // 404 error page is not sent to page workers.
+      assert.equal(audit.workers.length, 4); // 404 error page is not sent to page workers.
       assert(audit.workers.every(worker => worker.status === 'completed' || worker.status === 'skipped'));
       const locale = audit.workers.find(worker => worker.agent === 'locale-formatting')!;
       assert.equal(locale.status, 'skipped'); assert.equal(locale.attempts, 0); assert.equal(locale.estimatedCostUsd, 0);
-      assert.deepEqual(audit.coverage.filter(entry => entry.implemented).map(entry => entry.category), ['spelling_grammar', 'formatting', 'links', 'locale_rules']);
+      assert.deepEqual(audit.coverage.filter(entry => entry.implemented).map(entry => entry.category), ['spelling_grammar', 'formatting', 'links', 'locale_rules', 'brand_voice', 'terminology']);
       assert.deepEqual(new Set(audit.issues.map(issue => issue.category)), new Set(['links', 'spelling_grammar']));
       assert.equal(calls, 1);
       const language = audit.workers.find(worker => worker.agent === 'language')!;

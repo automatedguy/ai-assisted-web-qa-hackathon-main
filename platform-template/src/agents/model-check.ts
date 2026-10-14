@@ -19,6 +19,7 @@ const findingSchema = {
 export type Findings = { issues: Array<{
   severity: "critical" | "major" | "minor" | "suggestion";
   description: string; evidence: string; expected: string; confidence: number; suggested_fix: string; rule?: string;
+  source_evidence?: string; kind?: "mistranslation" | "omission" | "addition" | "meaning_drift";
 }> };
 function rate(name: string): number | null {
   const raw = process.env[name];
@@ -27,18 +28,26 @@ function rate(name: string): number | null {
   return Number.isFinite(value) && value >= 0 ? value : null;
 }
 type Options = {
-  name: string; instructions: string; input: unknown; ruleIds?: string[];
+  name: string; instructions: string; input: unknown; ruleIds?: string[]; sourceText?: string;
 };
 
 export async function requestFindings({ page, model, report }: AgentContext, options: Options): Promise<Findings["issues"]> {
-  const schema = options.ruleIds ? {
+  const item = findingSchema.properties.issues.items;
+  const extraProperties = {
+    ...(options.ruleIds ? { rule: { type: "string", enum: options.ruleIds } } : {}),
+    ...(options.sourceText !== undefined ? {
+      source_evidence: { type: "string", minLength: 1 },
+      kind: { type: "string", enum: ["mistranslation", "omission", "addition", "meaning_drift"] },
+    } : {}),
+  };
+  const schema = {
     ...findingSchema,
     properties: { issues: { ...findingSchema.properties.issues, items: {
-      ...findingSchema.properties.issues.items,
-      required: [...findingSchema.properties.issues.items.required, "rule"],
-      properties: { ...findingSchema.properties.issues.items.properties, rule: { type: "string", enum: options.ruleIds } },
+      ...item,
+      required: [...item.required, ...Object.keys(extraProperties)],
+      properties: { ...item.properties, ...extraProperties },
     } } },
-  } : findingSchema;
+  };
   const validate = new Ajv().compile<Findings>(schema);
   if (!page) throw new Error("Model check requires a page.");
   if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured.");
@@ -80,6 +89,10 @@ export async function requestFindings({ page, model, report }: AgentContext, opt
     if (!validate(parsed)) throw new Error("Model response failed schema validation.");
     if (parsed.issues.some(issue => !issue.evidence.trim() || !page.text.includes(issue.evidence))) {
       throw new Error("Model evidence did not match the source page; no findings accepted.");
+    }
+    if (options.sourceText !== undefined && parsed.issues.some(issue =>
+      !issue.source_evidence?.trim() || !options.sourceText!.includes(issue.source_evidence))) {
+      throw new Error("Model source evidence did not match the reference Markdown; no findings accepted.");
     }
     return parsed.issues;
   }

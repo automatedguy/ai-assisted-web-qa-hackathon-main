@@ -41,7 +41,11 @@ function renderIssues() {
       'Status: ' + issue.status + ' · Confidence: ' + Math.round(issue.confidence * 100) + '%',
       ...(issue.expected ? ['Expected: ' + issue.expected] : []),
       ...(issue.suggested_fix ? ['Suggested fix: ' + issue.suggested_fix] : []),
-    ]) { const p = document.createElement('p'); p.textContent = text; item.append(p); }
+    ]) {
+      const p = document.createElement('p'); p.textContent = text;
+      if (text.startsWith('Evidence: ')) p.style.whiteSpace = 'pre-wrap';
+      item.append(p);
+    }
     for (const [status, label] of [['verified', 'Verify'], ['dismissed', 'Dismiss'], ['escalated', 'Escalate']]) {
       const button = document.createElement('button'); button.textContent = label; button.disabled = auditActive || status === issue.status;
       button.addEventListener('click', async () => {
@@ -113,7 +117,7 @@ crawlButton.addEventListener('click', async () => {
   busy(true); $('#message').textContent = 'Crawling pages and checking links…';
   try {
     const crawl = await api('/api/crawl', { method: 'POST' }); renderPages(crawl); issues = crawl.issues;
-    $('#audit-status').textContent = 'Crawl and links only. Language, Locale/Formatting, and Brand/Terminology agents were not run.';
+    $('#audit-status').textContent = 'Crawl and links only. Language, Locale/Formatting, Brand/Terminology, and Translation Quality agents were not run.';
     $('#workers').replaceChildren(); $('#coverage').replaceChildren(); $('#usage').textContent = '';
     $('#message').textContent = '';
   } catch (error) { $('#message').textContent = error.message; }

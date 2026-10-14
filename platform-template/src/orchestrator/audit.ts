@@ -6,6 +6,7 @@ import { checkBrokenLinks } from "../agents/links.js";
 import { languageAgent } from "../agents/language.js";
 import { localeFormattingAgent } from "../agents/locale-formatting.js";
 import { brandTerminologyAgent } from "../agents/brand-terminology.js";
+import { translationQualityAgent } from "../agents/translation-quality.js";
 import { WorkerFailure } from "../agents/types.js";
 import type { Agent, WorkerRun } from "../agents/types.js";
 
@@ -14,6 +15,7 @@ const agents: Agent[] = [
   languageAgent,
   localeFormattingAgent,
   brandTerminologyAgent,
+  translationQualityAgent,
 ];
 export type Audit = {
   id: string; status: "running" | "completed" | "partial" | "failed";

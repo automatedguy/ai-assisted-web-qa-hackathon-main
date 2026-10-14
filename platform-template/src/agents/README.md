@@ -6,6 +6,10 @@ owns policy selection, contextual locale/formatting instructions and overlap
 suppression; `date-format.ts` is its deterministic numeric-date tool.
 `brand-terminology.ts` owns brand tone/style and glossary checks, assigning
 shared forbidden terms to Terminology and reporting two categories per worker.
+`translation-quality.ts` compares target pages with mapped Markdown sources;
+`reference-content.ts` resolves page mappings and confines read-only source access
+to the reference directory. Translation findings contain validated quotes from
+both source and target, with insertion anchors labeled for omissions.
 `model-check.ts` shares structured output, API retry, usage accounting and exact
 source-evidence validation. `links.ts` provides deterministic HTTP findings.
 The orchestrator registers and schedules agents independently.

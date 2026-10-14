@@ -8,18 +8,19 @@ import type { QaIssue } from "./issues.js";
 export const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
 export type Profile = Record<string, unknown> & {
   locale: Record<string, unknown> & { target_locale: string };
+  reference_content?: Array<{ page: string; source_text_path: string }>;
 };
 const validateProfile = new Ajv().compile<Profile>({
   type: "object", required: ["locale"],
   properties: {
     locale: {
       type: "object", required: ["target_locale"],
-      properties: { target_locale: { type: "string", minLength: 2 } },
+      properties: { target_locale: { type: "string", minLength: 2 }, source_locale: { type: "string", minLength: 2 } },
     },
     brand_voice: { type: "object" }, glossary: { type: "object" },
     reference_content: { type: "array", items: {
       type: "object", required: ["page", "source_text_path"],
-      properties: { page: { type: "string" }, source_text_path: { type: "string" } },
+      properties: { page: { type: "string", minLength: 1 }, source_text_path: { type: "string", minLength: 1 } },
     } },
   },
 });

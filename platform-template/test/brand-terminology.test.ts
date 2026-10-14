@@ -91,7 +91,7 @@ test('brand and terminology workflow with alternate profiles and a local model',
       findings = findings.map(issue => ({ ...issue, description: 'Reworded explanation.' }));
       const next = await run(audit.issues);
       assert.equal(next.issues.find(issue => issue.id === reviewed.id)!.status, 'dismissed');
-      assert.deepEqual(next.coverage.filter(item => !item.implemented).map(item => item.category), ['media']);
+      assert.deepEqual(next.coverage.filter(item => !item.implemented), []);
     });
     await t.test('accepts clean Japanese content and preserves an unseen glossary', async () => {
       await setup({ locale: { target_locale: 'ja-JP' }, brand_voice: { tone: 'polite' },

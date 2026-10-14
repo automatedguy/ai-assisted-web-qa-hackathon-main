@@ -83,6 +83,16 @@ function renderAudit(audit) {
       (worker.categories || []).join(', ') + ' · ' + (worker.message || worker.model || 'Deterministic checks')]) {
       const cell = document.createElement('td'); cell.textContent = text; row.append(cell);
     }
+    if (worker.mediaChecks?.length) {
+      const details = document.createElement('details'); const summary = document.createElement('summary');
+      summary.textContent = 'Media checks'; details.append(summary);
+      const list = document.createElement('ul');
+      for (const check of worker.mediaChecks) {
+        const item = document.createElement('li');
+        item.textContent = `${check.check} · ${check.status} · ${check.asset} · ${check.message}`; list.append(item);
+      }
+      details.append(list); row.lastElementChild.append(details);
+    }
     $('#workers').append(row);
   }
   const input = audit.workers.reduce((total, worker) => total + worker.inputTokens, 0);
@@ -117,7 +127,7 @@ crawlButton.addEventListener('click', async () => {
   busy(true); $('#message').textContent = 'Crawling pages and checking links…';
   try {
     const crawl = await api('/api/crawl', { method: 'POST' }); renderPages(crawl); issues = crawl.issues;
-    $('#audit-status').textContent = 'Crawl and links only. Language, Locale/Formatting, Brand/Terminology, and Translation Quality agents were not run.';
+    $('#audit-status').textContent = 'Crawl and links only. Language, Locale/Formatting, Brand/Terminology, Translation Quality, and Media agents were not run.';
     $('#workers').replaceChildren(); $('#coverage').replaceChildren(); $('#usage').textContent = '';
     $('#message').textContent = '';
   } catch (error) { $('#message').textContent = error.message; }

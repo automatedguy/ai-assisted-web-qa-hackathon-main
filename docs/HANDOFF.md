@@ -1,6 +1,6 @@
 # Project Handoff
 
-Updated: 2026-10-14. Implementation: Translation Quality milestone on `main`.
+Updated: 2026-10-14. Implementation: Media milestone on `main`.
 Use Git history to identify the current commit and publication status.
 Remote: https://github.com/automatedguy/ai-assisted-web-qa-hackathon-main.
 Check Git status and recent commits before continuing; this is a point-in-time snapshot.
@@ -24,11 +24,10 @@ The demo replaces the practice site and profile with unseen inputs, without code
 
 ## Current Implementation
 
-Seven of eight categories are implemented under a shared coordinator: Language,
-Links, Formatting, Locale Rules, Brand Voice, Terminology, and Translation Quality.
-Language, Locale/Formatting, Brand/Terminology and Translation Quality use specialized
-model instructions; Links and numeric-date checking are deterministic. Media
-remains unimplemented.
+All eight categories are implemented under a shared coordinator with six agents:
+Language, Links, Locale/Formatting, Brand/Terminology, Translation Quality and Media.
+Links and numeric-date checks are deterministic. Media combines deterministic
+resource/metadata checks with model-based caption, alt text and image inspection.
 
 | Component | Location and behavior |
 |---|---|
@@ -41,6 +40,7 @@ remains unimplemented.
 | Locale/Formatting | `src/agents/locale-formatting.ts`: profile-driven policies, contextual model checks and overlap suppression; `date-format.ts`: deterministic numeric dates |
 | Brand/Terminology | `src/agents/brand-terminology.ts`: profile-driven tone/style and glossary checks, shared forbidden-term ownership, stable finding IDs |
 | Translation Quality | `src/agents/translation-quality.ts`: source/target meaning comparison; `reference-content.ts`: mapped Markdown loading within the configured directory |
+| Media | `src/agents/media.ts`: resource/metadata and visual/language checks; `media-resources.ts`: bounded fetches, image signatures and basic WebVTT extraction |
 | Shared model client | `src/agents/model-check.ts`: structured outputs, retries, exact evidence, token/cost tracking |
 | Links | `src/agents/links.ts`: reports fetched same-origin destinations returning HTTP errors |
 | Issue contract | `docs/ISSUE_SCHEMA.json`, with TypeScript types in `src/issues.ts` |
@@ -55,9 +55,11 @@ Paths beginning with `src/` above are relative to `platform-template/`.
 
 The Language agent uses the profile's target locale and glossary, one request per
 successful HTML page. It has a 60-second request timeout and one retry for transient
-failures. Every accepted audit finding passes JSON Schema validation. Evidence must
-be a nonempty exact substring of the page text. Translation findings separately
+failures. Every accepted audit finding passes JSON Schema validation. Text-agent
+evidence must be a nonempty exact substring of the page text. Translation findings separately
 validate exact source and target quotes before displaying both in `evidence`.
+Media validates alt/caption text against the corresponding asset and explicitly
+labels model visual observations rather than claiming exact pixel verification.
 Workers now declare/report `categories: string[]` rather than a singular category.
 Workers report attempts, duration,
 findings, model, and token usage; completion events are logged as JSON.
@@ -87,6 +89,15 @@ fail the worker before any translation model call. Source/target evidence is
 validated separately. Omissions use clearly labeled target insertion anchors;
 additions show source context. Both source and target have a 24,000-character limit.
 
+Media fetches same-origin images, responsive alternatives, video sources, posters
+and caption files. It attaches PNG/JPEG/WebP image bytes to one model request per
+page and reviews actual fetched caption cues. Model alt/caption evidence must be
+an exact substring of that asset's text; visual observations are labeled for human
+review rather than presented as verified OCR. Missing alt/source, HTTP failures
+and malformed captions are deterministic findings that survive model failures.
+Worker `mediaChecks` are visible in dashboard details and completion logs.
+Media-only pages are dispatched even when body text is empty.
+
 ## Run and Configure
 
 The local setup previously used Colima and a standalone Docker container for the
@@ -103,6 +114,8 @@ npm run dev
 The development command loads `../.env`. Required API configuration is
 `OPENAI_API_KEY`; `OPENAI_MODEL` selects the model (current default: `gpt-6-astra`).
 Use a model supporting Responses structured outputs.
+Media visual checks also require image-input support; the existing model setting
+is reused without introducing a separate model or API credential.
 
 `SITE_URL`, `LINGUISTIC_ASSET_PATH`, `ISSUE_SCHEMA_PATH`, and
 `REFERENCE_CONTENT_PATH` override local defaults. The reference directory defaults
@@ -117,14 +130,14 @@ The Compose plugin was unavailable earlier on this machine; this updated Compose
 setup has not been exercised end to end.
 
 Click **Run audit** to use the model; this sends page text and mapped reference
-Markdown to OpenAI and incurs API
+Markdown, images, alt text and caption text to OpenAI and incurs API
 usage. **Crawl and check links only** does not call the model. Signing into another
 ChatGPT account does not change the application's `.env` API credential.
 
 ## Validation Already Performed
 
 - `npm run typecheck`, dashboard JavaScript syntax, and Git whitespace checks passed.
-- `npm test` passed all 36 TAP entries, including parent groups. Tests use
+- `npm test` passed all 48 TAP entries, including parent groups. Tests use
   local mock website/API servers without loading `.env` or contacting OpenAI.
 - Coverage includes alternate Japanese, US, French and German profiles; numeric
   date ambiguity and calendar validity; currency/unit category separation;
@@ -143,6 +156,20 @@ ChatGPT account does not change the application's `.env` API credential.
   English/German sources, clean output, omission/addition evidence labels,
   exact source/target evidence rejection, review-state preservation, failure isolation,
   retries and usage. The source/target comparisons in these tests use mock responses.
+- Media tests cover actual byte submission to the mock API, responsive/media-only
+  pages, alt/caption evidence validation, visual-evidence labeling, malformed WebVTT,
+  wrong language metadata, alternate caption languages, broken images/videos/tracks,
+  same-origin redirects, unsupported/oversized resources, image limits, review-state
+  preservation, retained deterministic findings and retry/usage reporting.
+- A live eight-category audit on 2026-10-14 finished `completed` in 55.1 seconds:
+  15 workers completed and the pricing page's Media worker skipped (no media).
+  It produced 22 total findings, including six Media findings: missing hero alt,
+  English marketing text in the mobile responsive image, a contradictory security
+  image headline, incorrect product identity in alt text, English team-photo alt,
+  and English cues in a track labeled Spanish. The actual images, markup and
+  caption file were inspected against these findings. Seven image inputs (including
+  a repeated poster) and one caption track were reviewed. This is a smoke test,
+  not a full accuracy benchmark; review statuses were left unchanged.
 - A live seven-category practice-site audit on 2026-10-14 completed all 13 workers
   in 43.9 seconds and produced 17 total findings. Translation Quality added four:
   omitted product reliability, Business storage reduced from 5 TB to 1 TB, an
@@ -166,8 +193,8 @@ ChatGPT account does not change the application's `.env` API credential.
 - The earlier “Milesde” finding was a crawler artifact from adjacent `dt`/`dd`
   elements. Block-boundary spacing now prevents it, with regression coverage.
 - The dashboard derives coverage from the coordinator registry and now exposes
-  seven available categories. The overall audit remains `partial` because Media
-  is unimplemented.
+  all eight available categories. Audits can now finish `completed` when workers
+  succeed/skip and crawl coverage is complete; findings are not worker failures.
 - Docker Compose end-to-end validation remains pending.
 
 ## Known Limitations
@@ -185,20 +212,22 @@ ChatGPT account does not change the application's `.env` API credential.
   needs refinement.
 - Locale/Formatting supports the explicit fields documented in the platform README;
   unknown locale keys are preserved but do not automatically become checks.
-- Media metadata is extracted, but image/video/caption auditing is not implemented.
+- Media checks are bounded to same-origin HTTP(S) resources and supported raster
+  image inputs. Unsupported assets/limits cause visible incomplete coverage.
+  Video checks do not play/decode the full video, inspect audio, or validate caption
+  alignment. CSS backgrounds, iframe embeds and dynamically loaded media are not
+  crawled. See the platform README for the precise request/size/count limits.
 - Translation comparisons use extracted body text and raw reference Markdown.
   Semantic absence, acceptable paraphrasing and duplicate ownership require model
   judgment and human review; exact quote validation does not establish accuracy.
 
-## Next Task: Media
+## Next Task: Durable Runs and Review History
 
-1. Check image/video/caption availability and image alt text using crawled metadata.
-2. Compare caption languages and media text with the profile's target locale; add
-   visual inspection where appropriate without claiming metadata proves image content.
-3. Exercise alternate profiles and clean/error fixtures, then review live findings.
+1. Persist audits, worker reports, findings and review decisions across restarts.
+2. Record review status changes with timestamps and expose past runs in the dashboard.
+3. Test restart recovery and run isolation, then validate Docker Compose end to end.
 
-Following milestones: Links expansion, durable runs and review
-history, and a full unseen-input demo rehearsal.
+Following milestones: Links expansion and a full unseen-input demo rehearsal.
 
 ## Git and Session Continuity
 

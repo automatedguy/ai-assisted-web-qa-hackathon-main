@@ -109,7 +109,7 @@ test('translation workflow compares mapped sources with target evidence', async 
       assert.equal(audit.issues[0].category, 'translation_quality');
       assert.equal(audit.issues[0].evidence, 'Source (reference-content/source.md): “Cancel anytime.”\nTarget: “Annulez à la fin de l’année.”');
       assert.equal(audit.issues[0].suggested_fix, 'Use “Annulez à tout moment”.');
-      assert.deepEqual(audit.coverage.filter(item => !item.implemented).map(item => item.category), ['media']);
+      assert.deepEqual(audit.coverage.filter(item => !item.implemented), []);
       audit.issues[0].status = 'verified'; findings[0].description = 'Changed explanation.';
       const next = await run(audit.issues); assert.equal(next.issues[0].status, 'verified');
     });

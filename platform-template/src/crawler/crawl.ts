@@ -1,13 +1,16 @@
 import * as cheerio from "cheerio";
 
 export type PageLink = { text: string; href: string };
-export type PageImage = { src: string; alt: string | null };
+export type PageImage = { src: string; alt: string | null; candidates: string[]; selector: string; context: string; decorative: boolean };
 export type PageTrack = {
   src: string;
   kind: string | null;
   srclang: string | null;
   label: string | null;
+  selector: string;
+  videoSelector: string;
 };
+export type PageVideo = { sources: string[]; poster: string | null; selector: string; tracks: PageTrack[] };
 
 export type CrawledPage = {
   url: string;
@@ -18,6 +21,7 @@ export type CrawledPage = {
   links: PageLink[];
   images: PageImage[];
   tracks: PageTrack[];
+  videos: PageVideo[];
 };
 
 export type CrawlResult = {
@@ -92,29 +96,43 @@ export async function crawlSite(rawStartUrl: string): Promise<CrawlResult> {
           };
         });
 
+      // Asset URLs must not inherit HTML index-page normalization.
+      const assetUrl = (raw: string) => { try { return new URL(raw, url).href; } catch { return raw; } };
+      const srcsetUrls = (raw: string) => raw.trim().startsWith("data:") ? [raw.trim()] :
+        raw.split(",").map(candidate => candidate.trim().split(/\s+/)[0]).filter(Boolean).map(assetUrl);
       const images = $("img")
         .toArray()
-        .map((element) => {
+        .map((element, index) => {
           const image = $(element);
-          const rawSrc = image.attr("src") ?? "";
+          const rawSrc = image.attr("src")?.trim() ?? "";
+          const candidates = [...new Set([
+            ...(rawSrc ? [assetUrl(rawSrc)] : []), ...srcsetUrls(image.attr("srcset") ?? ""),
+            ...image.closest("picture").find("source[srcset]").toArray().flatMap(source => srcsetUrls($(source).attr("srcset") ?? "")),
+          ])];
           return {
-            src: rawSrc ? pageUrl(rawSrc, url) ?? rawSrc : "",
+            src: rawSrc ? assetUrl(rawSrc) : "", candidates, selector: `(//img)[${index + 1}]`,
             alt: image.attr("alt") ?? null,
+            context: image.parent().text().replace(/\s+/g, " ").trim().slice(0, 600),
+            decorative: ["presentation", "none"].includes(image.attr("role") ?? "") || image.attr("aria-hidden") === "true",
           };
         });
 
-      const tracks = $("video track")
-        .toArray()
-        .map((element) => {
-          const track = $(element);
-          const rawSrc = track.attr("src") ?? "";
-          return {
-            src: rawSrc ? pageUrl(rawSrc, url) ?? rawSrc : "",
-            kind: track.attr("kind") ?? null,
-            srclang: track.attr("srclang") ?? null,
-            label: track.attr("label") ?? null,
-          };
-        });
+      const videos: PageVideo[] = $("video").toArray().map((element, index) => {
+        const video = $(element);
+        const selector = `(//video)[${index + 1}]`;
+        const sources = [video.attr("src"), ...video.find("source").toArray().map(source => $(source).attr("src"))]
+          .filter((src): src is string => Boolean(src?.trim())).map(src => assetUrl(src.trim()));
+        return {
+          sources: [...new Set(sources)], selector, poster: video.attr("poster") ? assetUrl(video.attr("poster")!) : null,
+          tracks: video.find("track").toArray().map((element, trackIndex) => {
+            const track = $(element); const src = track.attr("src")?.trim();
+            return { src: src ? assetUrl(src) : "", kind: track.attr("kind") ?? "subtitles",
+              srclang: track.attr("srclang") ?? null, label: track.attr("label") ?? null,
+              selector: `${selector}/track[${trackIndex + 1}]`, videoSelector: selector };
+          }),
+        };
+      });
+      const tracks = videos.flatMap(video => video.tracks);
 
       pages.push({
         url,
@@ -125,6 +143,7 @@ export async function crawlSite(rawStartUrl: string): Promise<CrawlResult> {
         links,
         images,
         tracks,
+        videos,
       });
 
       for (const link of links) {

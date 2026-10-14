@@ -1,9 +1,9 @@
 # QA Platform
 
 TypeScript / Express audit platform with a coordinator, OpenAI Language,
-Locale/Formatting, Brand/Terminology and Translation Quality agents, and a
-deterministic Links worker. Seven categories are available: spelling/grammar,
-links, formatting, locale rules, brand voice, terminology, and translation quality.
+Locale/Formatting, Brand/Terminology, Translation Quality and Media agents, and a
+deterministic Links worker. All eight categories are implemented: spelling/grammar,
+links, formatting, locale rules, brand voice, terminology, translation quality, and media.
 
 ## Run locally
 
@@ -12,8 +12,9 @@ http://localhost:3000. The development script loads the repository-root `.env`.
 The practice site must be running at `SITE_URL` (default http://localhost:8080).
 
 - **Run audit** loads the YAML profile, crawls the site, and dispatches workers.
-  Page text, mapped reference Markdown and relevant profile values are sent to
-  OpenAI; API charges apply.
+  Page text, mapped reference Markdown, image bytes, alt text, caption text and
+  relevant profile values are sent to OpenAI; API charges apply. The configured
+  model must support image inputs for visual checks.
 - **Crawl and check links only** runs the existing deterministic check without
   model requests.
 - Review findings by category and mark them verified, dismissed, or escalated.
@@ -71,6 +72,10 @@ to one of the worker's declared categories. Worker API reports now contain
 - Translation Quality: one model request per successfully mapped page, comparing
   reference Markdown with target text. Both evidence quotes must match their
   respective inputs exactly before the finding is accepted.
+- Media: deterministic metadata/resource checks followed by at most one model
+  request per page for alt text, caption language, image descriptions and visible
+  image text. Image-only pages are included. Per-resource checks appear in the
+  worker's expandable **Media checks** details and JSON completion logs.
 - All accepted issues are validated against the supplied issue schema and
   deduplicated by stable ID. Matching findings retain their previous review
   status within the current server session.
@@ -188,15 +193,62 @@ Descriptions and explanatory prose are requested in English, with corrections
 quoted in the target language. Matching quote pairs retain review status across
 runs in the current server session.
 
+## Media checks
+
+The crawler retains image alt attributes, nearby context, explicit decorative
+roles, ordinary `src`/`srcset` and `<picture>` alternatives; video sources, posters
+and associated tracks retain element XPath locations. The Media agent checks:
+
+- Missing image alt attributes (without treating a deliberately empty decorative
+  alt as automatically wrong), missing source URLs, HTTP errors, and empty/HTML
+  responses in place of media.
+- Video source availability using a bounded range GET. This establishes resource
+  availability, not successful playback, codec support, audio or frame contents.
+- Caption/subtitle language declarations against the target language. Correctly
+  labeled alternate-language tracks are allowed alongside the target option.
+- Fetched WebVTT headers, readable cues and basic timing validity, followed by
+  model comparison of actual cue language with the declared language. Caption
+  necessity for videos without tracks is undetermined because audio is not inspected.
+- Alt language, clearly misleading image descriptions, informative images with
+  inappropriate empty alt, and legible image text inconsistent with the target
+  locale or supplied context. PNG, JPEG and WebP bytes are actually attached to
+  the model request; image content is never inferred solely from filenames.
+
+Alt and caption findings require exact evidence from the corresponding asset's
+text. Visual descriptions and transcriptions cannot be deterministically checked
+against pixels and are explicitly labeled **Visual observation (model; review
+required)**. Findings name the asset URL and element XPath. Model failures retain
+independent metadata/resource findings and leave the worker failed.
+
+Media fetches are restricted to the page's HTTP(S) origin, including redirects,
+with a 10-second timeout and three redirects. Bounds per page are 40 resource
+checks, eight image inputs and 16 MiB of attached image bytes. Each image is
+limited to 4 MiB, each track to 256 KiB and 24,000 extracted characters, and
+combined model metadata/caption input to 48,000 characters. Video responses are
+read up to 4 KiB. Repeated URLs share fetched bytes within a page worker.
+
+External/inline media, unsupported image formats (including SVG/GIF), limit hits
+and uncertain fetch failures appear as skipped/failed checks and make the worker
+and audit incomplete; they are not silently counted as inspected. CSS backgrounds,
+JavaScript-loaded media, iframe embeds, full image decoding, video playback,
+audio transcription and caption synchronization remain outside this implementation.
+These are implementation limits, not hardcoded practice-profile rules.
+
+Image requests follow the [OpenAI image-input format](https://developers.openai.com/api/docs/guides/images-vision).
+The basic cue extractor follows [WebVTT](https://www.w3.org/TR/webvtt1/); it is not
+a full rendering or conformance validator.
+
 ## Current limits and next milestones
 
 Audit results and review decisions are in memory; restarting clears them.
 Only the latest run is retained. Durable history and review audit trails are
 still pending. Overall runs are labeled **partial** while any category is
-unimplemented, a worker fails, or crawl coverage is incomplete.
+unimplemented, a worker fails, or crawl coverage is incomplete. **Completed** means
+the run finished without those failures; inspect worker skips and media limitations
+to understand what was actually checked. Findings themselves do not make a run partial.
 
-The Media agent remains to implement. Links
-currently covers fetched same-origin HTTP errors only; wrong-locale links and
+Next milestones are durable run/review history, expanded link checks, Docker
+validation and an unseen-input rehearsal. Links currently covers fetched same-origin HTTP errors only; wrong-locale links and
 anchor/destination meaning are pending. Page agents skip non-success responses,
 and pages over 24,000 characters fail their model step visibly until chunking
 is added. Contextual locale/formatting checks depend on model judgment and need

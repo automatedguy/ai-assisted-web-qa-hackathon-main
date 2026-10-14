@@ -8,6 +8,7 @@ export type WorkerRun = {
   attempts: number; durationMs: number; issueCount: number;
   inputTokens: number; outputTokens: number; estimatedCostUsd: number | null;
   usageComplete: boolean; model?: string; message?: string;
+  mediaChecks?: Array<{ asset: string; check: string; status: "completed" | "failed" | "skipped"; message: string }>;
 };
 export type AgentContext = {
   crawl: CrawlResult; page?: CrawledPage; profile: Profile; model: string;
@@ -15,6 +16,7 @@ export type AgentContext = {
 };
 export type Agent = {
   id: string; categories: QaIssue["category"][]; scope: "site" | "page";
+  includeEmptyPages?: boolean;
   execute(context: AgentContext): Promise<QaIssue[]>;
 };
 

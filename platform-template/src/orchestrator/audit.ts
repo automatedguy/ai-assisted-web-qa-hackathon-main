@@ -7,6 +7,7 @@ import { languageAgent } from "../agents/language.js";
 import { localeFormattingAgent } from "../agents/locale-formatting.js";
 import { brandTerminologyAgent } from "../agents/brand-terminology.js";
 import { translationQualityAgent } from "../agents/translation-quality.js";
+import { mediaAgent } from "../agents/media.js";
 import { WorkerFailure } from "../agents/types.js";
 import type { Agent, WorkerRun } from "../agents/types.js";
 
@@ -16,6 +17,7 @@ const agents: Agent[] = [
   localeFormattingAgent,
   brandTerminologyAgent,
   translationQualityAgent,
+  mediaAgent,
 ];
 export type Audit = {
   id: string; status: "running" | "completed" | "partial" | "failed";
@@ -38,10 +40,10 @@ export async function executeAudit(audit: Audit, siteUrl: string, model: string,
     audit.targetLocale = profile.locale.target_locale;
     audit.phase = "Crawling site";
     const crawl = audit.crawl = await crawlSite(siteUrl);
-    const pages = crawl.pages.filter(page => page.status >= 200 && page.status < 300 && page.text.trim());
-    if (!pages.length) throw new Error("No successful HTML pages with text were available to audit.");
+    const pages = crawl.pages.filter(page => page.status >= 200 && page.status < 300);
+    if (!pages.length) throw new Error("No successful HTML pages were available to audit.");
     audit.phase = "Running workers";
-    const tasks = agents.flatMap(agent => (agent.scope === "site" ? [undefined] : pages).map(page => {
+    const tasks = agents.flatMap(agent => (agent.scope === "site" ? [undefined] : pages.filter(page => agent.includeEmptyPages || page.text.trim())).map(page => {
       const report: WorkerRun = {
         id: randomUUID(), agent: agent.id, categories: agent.categories, pageUrl: page?.url,
         status: "queued", attempts: 0, durationMs: 0, issueCount: 0,

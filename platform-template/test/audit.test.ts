@@ -64,13 +64,13 @@ test('audit workflow with an unseen profile and simulated model', async t => {
     await t.test('runs configured workers, validates findings, tracks usage, preserves review status', async () => {
       await reset(); const audit = createAudit();
       await executeAudit(audit, origin, 'mock-model', []);
-      assert.equal(audit.status, 'partial'); // Media is not implemented.
+      assert.equal(audit.status, 'completed'); // A broken link is a finding, not a worker failure.
       assert.equal(receivedLocale, 'fr-FR');
-      assert.equal(audit.workers.length, 5); // 404 error page is not sent to page workers.
+      assert.equal(audit.workers.length, 6); // 404 error page is not sent to page workers.
       assert(audit.workers.every(worker => worker.status === 'completed' || worker.status === 'skipped'));
       const locale = audit.workers.find(worker => worker.agent === 'locale-formatting')!;
       assert.equal(locale.status, 'skipped'); assert.equal(locale.attempts, 0); assert.equal(locale.estimatedCostUsd, 0);
-      assert.deepEqual(audit.coverage.filter(entry => entry.implemented).map(entry => entry.category), ['spelling_grammar', 'formatting', 'links', 'locale_rules', 'brand_voice', 'translation_quality', 'terminology']);
+      assert.deepEqual(audit.coverage.filter(entry => entry.implemented).map(entry => entry.category), ['spelling_grammar', 'formatting', 'links', 'locale_rules', 'brand_voice', 'translation_quality', 'terminology', 'media']);
       assert.deepEqual(new Set(audit.issues.map(issue => issue.category)), new Set(['links', 'spelling_grammar']));
       assert.equal(calls, 1);
       const language = audit.workers.find(worker => worker.agent === 'language')!;

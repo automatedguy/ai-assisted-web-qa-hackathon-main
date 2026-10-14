@@ -20,6 +20,7 @@ export type Findings = { issues: Array<{
   severity: "critical" | "major" | "minor" | "suggestion";
   description: string; evidence: string; expected: string; confidence: number; suggested_fix: string; rule?: string;
   source_evidence?: string; kind?: "mistranslation" | "omission" | "addition" | "meaning_drift";
+  asset_id?: string; check?: "alt_language" | "image_content" | "image_text" | "caption_language";
 }> };
 function rate(name: string): number | null {
   const raw = process.env[name];
@@ -29,6 +30,8 @@ function rate(name: string): number | null {
 }
 type Options = {
   name: string; instructions: string; input: unknown; ruleIds?: string[]; sourceText?: string;
+  images?: Array<{ id: string; dataUrl: string }>;
+  mediaAssets?: Record<string, { alt: string | null; captionText: string | null; visual: boolean }>;
 };
 
 export async function requestFindings({ page, model, report }: AgentContext, options: Options): Promise<Findings["issues"]> {
@@ -38,6 +41,10 @@ export async function requestFindings({ page, model, report }: AgentContext, opt
     ...(options.sourceText !== undefined ? {
       source_evidence: { type: "string", minLength: 1 },
       kind: { type: "string", enum: ["mistranslation", "omission", "addition", "meaning_drift"] },
+    } : {}),
+    ...(options.mediaAssets ? {
+      asset_id: { type: "string", enum: Object.keys(options.mediaAssets) },
+      check: { type: "string", enum: ["alt_language", "image_content", "image_text", "caption_language"] },
     } : {}),
   };
   const schema = {
@@ -65,7 +72,13 @@ export async function requestFindings({ page, model, report }: AgentContext, opt
       result = await client.responses.create({
         model, store: false, max_output_tokens: 4000,
         instructions: options.instructions,
-        input: JSON.stringify(options.input),
+        input: options.images?.length ? [{ role: "user", content: [
+          { type: "input_text", text: JSON.stringify(options.input) },
+          ...options.images.flatMap(image => [
+            { type: "input_text" as const, text: `Image asset_id: ${image.id}` },
+            { type: "input_image" as const, image_url: image.dataUrl, detail: "high" as const },
+          ]),
+        ] }] : JSON.stringify(options.input),
         text: { format: { type: "json_schema", name: options.name, strict: true, schema } },
       });
     } catch (error) {
@@ -87,7 +100,16 @@ export async function requestFindings({ page, model, report }: AgentContext, opt
     try { parsed = JSON.parse(result.output_text); }
     catch { throw new Error("Model response was empty, refused, or invalid JSON."); }
     if (!validate(parsed)) throw new Error("Model response failed schema validation.");
-    if (parsed.issues.some(issue => !issue.evidence.trim() || !page.text.includes(issue.evidence))) {
+    if (options.mediaAssets) {
+      for (const issue of parsed.issues) {
+        const asset = options.mediaAssets[issue.asset_id ?? ""];
+        const valid = asset && issue.evidence.trim() && (
+          issue.check === "alt_language" ? Boolean(asset.alt?.includes(issue.evidence)) :
+          issue.check === "caption_language" ? Boolean(asset.captionText?.includes(issue.evidence)) :
+          ["image_content", "image_text"].includes(issue.check ?? "") && asset.visual);
+        if (!valid) throw new Error("Media finding did not match an inspected asset or its evidence; no model findings accepted.");
+      }
+    } else if (parsed.issues.some(issue => !issue.evidence.trim() || !page.text.includes(issue.evidence))) {
       throw new Error("Model evidence did not match the source page; no findings accepted.");
     }
     if (options.sourceText !== undefined && parsed.issues.some(issue =>

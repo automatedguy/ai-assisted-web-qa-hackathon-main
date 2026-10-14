@@ -10,6 +10,10 @@ shared forbidden terms to Terminology and reporting two categories per worker.
 `reference-content.ts` resolves page mappings and confines read-only source access
 to the reference directory. Translation findings contain validated quotes from
 both source and target, with insertion anchors labeled for omissions.
+`media.ts` combines metadata/resource checks with alt/caption language and visual
+image inspection. `media-resources.ts` provides bounded same-origin fetches,
+image signature detection and basic WebVTT extraction. Media findings preserve
+asset URLs/XPaths; exact text evidence and model visual observations are distinguished.
 `model-check.ts` shares structured output, API retry, usage accounting and exact
 source-evidence validation. `links.ts` provides deterministic HTTP findings.
 The orchestrator registers and schedules agents independently.

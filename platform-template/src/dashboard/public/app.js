@@ -1,14 +1,17 @@
+import { createActivityView, categoryNames } from './activity.js';
 const $ = selector => document.querySelector(selector);
 const auditButton = $('#audit');
 const crawlButton = $('#crawl');
 const clearButton = $('#clear');
+const activity = createActivityView(document);
+let crawlRun;
 let issues = [];
 let auditActive = false;
 let reviewBusy = false;
 let viewVersion = 0;
 const categories = ['spelling_grammar', 'formatting', 'links', 'locale_rules', 'brand_voice', 'translation_quality', 'terminology', 'media'];
 for (const category of categories) {
-  const option = document.createElement('option'); option.value = category; option.textContent = category;
+  const option = document.createElement('option'); option.value = category; option.textContent = categoryNames[category];
   $('#category').append(option);
 }
 async function api(url, options) {
@@ -24,8 +27,7 @@ function busy(value) {
 function renderEmpty() {
   issues = [];
   $('#category').value = 'all';
-  $('#audit-status').textContent = 'No results. Run an audit or check links to get started.';
-  $('#workers').replaceChildren(); $('#coverage').replaceChildren(); $('#usage').textContent = '';
+  crawlRun = undefined; activity.render(null);
   renderPages(null); renderIssues();
 }
 function crawlSummary(crawl) {
@@ -75,24 +77,16 @@ function renderPages(crawl) {
 }
 function renderCrawl(crawl, durationMs) {
   const partial = crawl.errors.length > 0 || crawl.limitReached || !crawl.pages.some(page => page.status >= 200 && page.status < 300);
-  const duration = durationMs === undefined ? 'Unavailable' : (durationMs / 1000).toFixed(1) + 's';
-  $('#audit-status').textContent = `${partial ? 'PARTIAL' : 'COMPLETED'} · Crawl and link check · ${crawlSummary(crawl)} · ${issues.length} link ${issues.length === 1 ? 'finding' : 'findings'}.`;
-  $('#workers').replaceChildren();
-  const row = document.createElement('tr');
-  for (const text of ['links · site', partial ? 'partial' : 'completed', 1, duration, issues.length, '0 / 0',
-    'Checked fetched same-origin destinations for HTTP errors.']) {
-    const cell = document.createElement('td'); cell.textContent = text; row.append(cell);
-  }
-  $('#workers').append(row);
-  $('#coverage').replaceChildren();
-  for (const category of categories) {
-    const item = document.createElement('li');
-    item.textContent = category + (category === 'links' ? ' — ran' : ' — not run');
-    $('#coverage').append(item);
-  }
-  $('#usage').textContent = 'No model requests · 0 tokens · Cost: $0';
-  renderPages(crawl);
-  renderIssues();
+  crawlRun = {
+    id: crawlRun?.id || 'restored-crawl', kind: 'crawl', status: partial ? 'partial' : 'completed',
+    phase: 'Finished', startedAt: crawlRun?.startedAt, durationMs, crawl, issues,
+    workers: [{ id: 'links', agent: 'links', categories: ['links'], status: partial ? 'partial' : 'completed',
+      attempts: 1, durationMs, issueCount: issues.length, inputTokens: 0, outputTokens: 0,
+      estimatedCostUsd: 0, usageComplete: true,
+      message: partial ? 'Some destinations could not be checked. See crawl details.' : 'Checked fetched same-origin destinations for HTTP errors.' }],
+  };
+  activity.render(crawlRun);
+  renderPages(crawl); renderIssues();
 }
 function renderIssues() {
   if (reviewBusy) return;
@@ -133,40 +127,7 @@ function renderIssues() {
 }
 function renderAudit(audit) {
   busy(audit.status === 'running');
-  const elapsed = audit.status === 'running' ? Date.now() - Date.parse(audit.startedAt) : audit.durationMs;
-  $('#audit-status').textContent = `${audit.status.toUpperCase()} · ${audit.phase} · ${(elapsed / 1000).toFixed(1)}s` +
-    (audit.targetLocale ? ' · Locale: ' + audit.targetLocale : '') + (audit.error ? ' · ' + audit.error : '');
-  $('#coverage').replaceChildren();
-  for (const entry of audit.coverage) {
-    const item = document.createElement('li'); item.textContent = entry.category + (entry.implemented ? ' — available' : ' — not implemented');
-    $('#coverage').append(item);
-  }
-  $('#workers').replaceChildren();
-  for (const worker of audit.workers) {
-    const row = document.createElement('tr');
-    for (const text of [worker.agent + (worker.pageUrl ? ' · ' + worker.pageUrl : ' · site'), worker.status, worker.attempts,
-      (worker.durationMs / 1000).toFixed(1) + 's', worker.issueCount, worker.inputTokens + ' / ' + worker.outputTokens,
-      (worker.categories || []).join(', ') + ' · ' + (worker.message || worker.model || 'Deterministic checks')]) {
-      const cell = document.createElement('td'); cell.textContent = text; row.append(cell);
-    }
-    if (worker.mediaChecks?.length) {
-      const details = document.createElement('details'); const summary = document.createElement('summary');
-      summary.textContent = 'Media checks'; details.append(summary);
-      const list = document.createElement('ul');
-      for (const check of worker.mediaChecks) {
-        const item = document.createElement('li');
-        item.textContent = `${check.check} · ${check.status} · ${check.asset} · ${check.message}`; list.append(item);
-      }
-      details.append(list); row.lastElementChild.append(details);
-    }
-    $('#workers').append(row);
-  }
-  const input = audit.workers.reduce((total, worker) => total + worker.inputTokens, 0);
-  const output = audit.workers.reduce((total, worker) => total + worker.outputTokens, 0);
-  const knownCost = audit.workers.length && audit.workers.every(worker => worker.estimatedCostUsd !== null);
-  const cost = knownCost ? '$' + audit.workers.reduce((sum, worker) => sum + worker.estimatedCostUsd, 0).toFixed(5) : 'unavailable (rates not configured or usage incomplete)';
-  $('#usage').textContent = `Reported tokens: ${input} input / ${output} output · Estimated cost: ${cost}` +
-    (audit.workers.some(worker => !worker.usageComplete) ? ' · Some requests have unknown usage.' : '');
+  activity.render(audit);
   renderPages(audit.crawl); issues = audit.issues; renderIssues();
 }
 let pollTimer;
@@ -203,8 +164,14 @@ crawlButton.addEventListener('click', async () => {
   const started = performance.now();
   busy(true); $('#message').textContent = 'Crawling pages and checking links…';
   crawlButton.textContent = 'Checking links…';
-  $('#audit-status').textContent = 'RUNNING · Crawling pages and checking links…';
-  $('#workers').replaceChildren(); $('#coverage').replaceChildren(); $('#usage').textContent = '';
+  crawlRun = {
+    id: `crawl-${Date.now()}`, kind: 'crawl', status: 'running', phase: 'Crawling pages and checking links',
+    startedAt: new Date().toISOString(), issues: [], workers: [{
+      id: 'links', agent: 'links', categories: ['links'], status: 'running', attempts: 1,
+      durationMs: 0, issueCount: 0, inputTokens: 0, outputTokens: 0, estimatedCostUsd: 0, usageComplete: true,
+    }],
+  };
+  activity.render(crawlRun);
   $('#category').value = 'all';
   renderIssues();
   try {
@@ -212,7 +179,9 @@ crawlButton.addEventListener('click', async () => {
     renderCrawl(crawl, performance.now() - started);
     $('#message').textContent = `Link check finished: ${issues.length} ${issues.length === 1 ? 'finding' : 'findings'}. See Findings below.`;
   } catch (error) {
-    $('#audit-status').textContent = 'FAILED · Crawl and link check';
+    crawlRun.status = 'failed'; crawlRun.error = error.message; crawlRun.durationMs = performance.now() - started;
+    crawlRun.workers[0].status = 'failed'; crawlRun.workers[0].message = error.message;
+    activity.render(crawlRun);
     $('#message').textContent = error.message;
   } finally { crawlButton.textContent = 'Crawl and check links only'; busy(false); renderIssues(); }
 });

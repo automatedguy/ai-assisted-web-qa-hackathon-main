@@ -5,12 +5,8 @@ h1, h2 { margin-top: 0; } h2 { font-size: 1.25rem; }
 button, select { padding: 9px 14px; margin: 4px; font: inherit; border: 1px solid #becada; border-radius: 6px; background: white; cursor: pointer; }
 #audit { background: #245ad3; color: white; border-color: #245ad3; }
 button:disabled { opacity: .55; cursor: default; }
-.table-wrap { overflow-x: auto; } table { width: 100%; border-collapse: collapse; text-align: left; }
-th, td { padding: 10px; border-bottom: 1px solid #e5e9f0; vertical-align: top; }
-td:first-child { max-width: 320px; overflow-wrap: anywhere; }
 #issues { padding-left: 20px; } #issues li { padding: 14px 0; border-bottom: 1px solid #e5e9f0; }
-#issues p, #message { overflow-wrap: anywhere; } #coverage { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; list-style: none; }
-#coverage li { padding: 6px 10px; background: #eef2f8; border-radius: 5px; font-size: .85rem; }
+#issues p, #message { overflow-wrap: anywhere; }
 a { color: #245ad3; } pre { white-space: pre-wrap; }
 .page-list { list-style: none; padding: 0; }
 .page-list li { padding: 12px 0; overflow-wrap: anywhere; }
@@ -18,3 +14,41 @@ a { color: #245ad3; } pre { white-space: pre-wrap; }
 .page-info { margin: 5px 0 0; color: #526078; font-size: .9rem; }
 #broken-destinations { margin-top: 20px; padding: 0 16px; border: 1px solid #edc5c1; border-radius: 8px; background: #fff8f7; }
 .destination-error { display: block; margin-bottom: 5px; color: #9c2c23; }
+.activity-bar { display: flex; align-items: center; gap: 14px; padding: 16px 20px; }
+.activity-copy { flex: 1; min-width: 0; }
+.activity-headline { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: baseline; }
+#activity-duration, #activity-detail, .activity-muted { color: #526078; font-size: .9rem; }
+#activity-detail, #activity-attention { margin: 5px 0 0; }
+#activity-attention { font-size: .9rem; color: #85520e; }
+.activity-dot { width: 9px; height: 9px; flex: 0 0 auto; border: 2px solid transparent; border-radius: 50%; background: #8290a5; }
+[data-state="complete"] .activity-dot { background: #25805a; }
+[data-state="warning"] .activity-dot { background: #ac6c10; }
+[data-state="running"] .activity-dot { background: transparent; border-color: #d4e0ff; border-top-color: #245ad3; animation: activity-spin 1s linear infinite; }
+#view-activity { white-space: nowrap; margin: 0; color: #245ad3; border-color: transparent; background: #eef3ff; }
+button:focus-visible, summary:focus-visible, a:focus-visible { outline: 3px solid #245ad3; outline-offset: 3px; }
+#activity-panel { position: fixed; inset: 0 0 0 auto; margin: 0; width: min(480px, 100vw); height: 100%; height: 100dvh; max-height: none; max-width: 100vw; box-sizing: border-box; padding: 0; border: 0; border-left: 1px solid #d9e0eb; color: #17243a; background: #fff; box-shadow: -12px 0 50px #17243a1a; }
+#activity-panel[open] { display: flex; flex-direction: column; }
+#activity-panel::backdrop { background: #17243a26; }
+.activity-panel-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 24px; border-bottom: 1px solid #e5e9f0; }
+.activity-panel-header h2 { margin: 0; }
+.activity-panel-header p { margin: 8px 0 0; color: #526078; font-size: .9rem; }
+#close-activity { margin: 0; white-space: nowrap; }
+.activity-panel-body { overflow-y: auto; overscroll-behavior: contain; padding: 8px 24px 24px; }
+.activity-panel-body h3 { font-size: 1rem; margin: 24px 0 8px; }
+.activity-list { list-style: none; padding: 0; margin: 0; }
+.activity-list li { padding: 12px 0; border-bottom: 1px solid #edf0f5; line-height: 1.5; font-size: .9rem; white-space: pre-line; overflow-wrap: anywhere; }
+.activity-events li { color: #526078; }
+.activity-disclosure { margin: 24px 0 0; padding: 16px 0 0; border: 0; border-top: 1px solid #d9e0eb; border-radius: 0; }
+.activity-disclosure summary { cursor: pointer; font-size: .9rem; font-weight: 600; }
+#activity-usage { font-size: .85rem; line-height: 1.5; color: #526078; }
+@keyframes activity-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .activity-dot { animation: none !important; } }
+@media (max-width: 600px) {
+  main { padding: 0 16px; }
+  .activity-bar { flex-wrap: wrap; padding: 16px; gap: 12px; }
+  .activity-copy { flex-basis: calc(100% - 28px); }
+  #view-activity { margin-left: 25px; }
+  #activity-panel { width: 100vw; border-left: 0; }
+  .activity-panel-header { padding: 20px 16px; }
+  .activity-panel-body { padding: 8px 16px 24px; }
+}

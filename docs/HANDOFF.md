@@ -1,6 +1,6 @@
 # Project Handoff
 
-Updated: 2026-10-14. Implementation: Media milestone on `main`.
+Updated: 2026-10-15. Implementation: Media milestone plus dashboard activity and reset controls.
 Use Git history to identify the current commit and publication status.
 Remote: https://github.com/automatedguy/ai-assisted-web-qa-hackathon-main.
 Check Git status and recent commits before continuing; this is a point-in-time snapshot.
@@ -44,7 +44,7 @@ resource/metadata checks with model-based caption, alt text and image inspection
 | Shared model client | `src/agents/model-check.ts`: structured outputs, retries, exact evidence, token/cost tracking |
 | Links | `src/agents/links.ts`: reports fetched same-origin destinations returning HTTP errors |
 | Issue contract | `docs/ISSUE_SCHEMA.json`, with TypeScript types in `src/issues.ts` |
-| Dashboard | `src/dashboard/public/`: audit progress, worker table, category filtering, review actions |
+| Dashboard | `src/dashboard/public/`: compact activity bar, optional activity panel, category filtering, review actions and Clear results |
 
 Paths beginning with `src/` above are relative to `platform-template/`.
 
@@ -52,6 +52,15 @@ Paths beginning with `src/` above are relative to `platform-template/`.
 `GET /api/audits/latest`; concurrent audit/crawl requests get 409.
 `POST /api/crawl` remains a model-free crawl/link-check operation.
 `GET /api/issues` and `PATCH /api/issues/:id/status` support review.
+`DELETE /api/results` clears the current run, crawl, findings and review decisions;
+it rejects requests while an audit or crawl is running.
+
+The activity panel replaces the worker table/category badges. It groups worker
+statuses by agent and shows the last 60 state changes observed by this browser tab.
+These are polling observations, not a persistent server event log; refresh rebuilds
+the view from the current snapshot. Skipped/failed checks and unrun categories stay
+visible in the main activity bar. Coverage and technical details (including media
+checks) expand inside the panel. No additional model calls are made.
 
 The Language agent uses the profile's target locale and glossary, one request per
 successful HTML page. It has a 60-second request timeout and one retry for transient
@@ -137,8 +146,13 @@ ChatGPT account does not change the application's `.env` API credential.
 ## Validation Already Performed
 
 - `npm run typecheck`, dashboard JavaScript syntax, and Git whitespace checks passed.
-- `npm test` passed all 48 TAP entries, including parent groups. Tests use
+- `npm test` passed all 55 TAP entries, including parent groups. Tests use
   local mock website/API servers without loading `.env` or contacting OpenAI.
+- Dashboard validation on 2026-10-15 covered observed concurrency, incomplete and
+  skipped coverage, retry descriptions, and reset behavior. Headless Chrome checks
+  with intercepted API responses exercised live updates, stable disclosures,
+  keyboard focus/Escape, clear/reset, crawl/reload and mobile layout. Desktop and
+  mobile screenshots were inspected. No paid model audit was run for this UI change.
 - Coverage includes alternate Japanese, US, French and German profiles; numeric
   date ambiguity and calendar validity; currency/unit category separation;
   explicit number/address/phone/capitalization rules; skipped optional policies;

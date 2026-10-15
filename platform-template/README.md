@@ -23,8 +23,19 @@ The practice site must be running at `SITE_URL` (default http://localhost:8080).
   also rejects requests while an audit or crawl is running.
 - Review findings by category and mark them verified, dismissed, or escalated.
   Review actions become available after the audit finishes.
-- The progress table shows worker categories, status, model, attempts, duration, findings,
-  and reported input/output token counts.
+- A compact activity bar shows progress and findings. Failed, skipped, and unrun
+  checks remain visible even when the activity panel is closed.
+- **View activity** opens a side panel with agent statuses and recent updates.
+  It stays open during a run and fills the screen on mobile. Close it with the
+  Close button or Escape; keyboard focus returns to View activity.
+- **Check coverage** reports actual execution by category. **Technical details**
+  holds worker timing, attempts, model, token/cost totals, errors, and media checks.
+  The disclosures stay open across updates, and the panel does not auto-scroll.
+- Activity descriptions come from the existing audit polling, with no additional
+  model calls. The last 60 observed updates are kept in the current browser tab;
+  timestamps indicate when an update was observed. Refreshing rebuilds the view
+  from the latest server snapshot, so this is not a durable event history and
+  brief transitions between polls may not appear. Clear results resets the view.
 
 `npm run typecheck` checks TypeScript. `npm test` runs integration checks with
 an isolated local website and simulated OpenAI API; it does not load `.env`
@@ -79,7 +90,7 @@ to one of the worker's declared categories. Worker API reports now contain
 - Media: deterministic metadata/resource checks followed by at most one model
   request per page for alt text, caption language, image descriptions and visible
   image text. Image-only pages are included. Per-resource checks appear in the
-  worker's expandable **Media checks** details and JSON completion logs.
+  activity panel's **Technical details** and JSON completion logs.
 - All accepted issues are validated against the supplied issue schema and
   deduplicated by stable ID. Matching findings retain their previous review
   status within the current server session.

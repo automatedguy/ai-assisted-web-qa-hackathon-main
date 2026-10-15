@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>QA Platform</title><link rel="stylesheet" href="/style.css">
-  <script src="/app.js" defer></script>
+  <script src="/app.js" type="module"></script>
 </head>
 <body><main>
   <h1>QA Platform</h1>
@@ -13,14 +13,14 @@
   <button id="clear" type="button" disabled title="Clear the current results and review decisions">Clear results</button>
   <p>Run audit checks all eight categories. Page text, mapped reference content, images, alt text, and captions are sent to OpenAI for review. API charges apply.</p>
   <p id="message" role="status"></p>
-  <section aria-labelledby="execution-heading">
-    <h2 id="execution-heading">Audit progress</h2>
-    <p id="audit-status" aria-live="polite">No audit yet.</p>
-    <p id="usage"></p><ul id="coverage"></ul>
-    <div class="table-wrap"><table>
-      <thead><tr><th>Worker / page</th><th>Status</th><th>Attempts</th><th>Duration</th><th>Findings</th><th>Tokens (in / out)</th><th>Details</th></tr></thead>
-      <tbody id="workers"></tbody>
-    </table></div>
+  <section id="activity-bar" class="activity-bar" data-state="idle" aria-label="Audit activity">
+    <span class="activity-dot" aria-hidden="true"></span>
+    <div class="activity-copy">
+      <div class="activity-headline"><strong id="activity-status" aria-live="polite">Ready to check your site</strong><span id="activity-duration"></span></div>
+      <p id="activity-detail">Run an audit or check links to get started.</p>
+      <p id="activity-attention" aria-live="polite" hidden></p>
+    </div>
+    <button id="view-activity" type="button" aria-haspopup="dialog" aria-controls="activity-panel" aria-expanded="false">View activity <span aria-hidden="true">→</span></button>
   </section>
   <section aria-labelledby="pages-heading">
     <h2 id="pages-heading">Pages and link destinations</h2>
@@ -40,4 +40,22 @@
   <details><summary>API connection</summary>
     <button id="test" type="button">Test OpenAI connection</button><pre id="result" aria-live="polite"></pre>
   </details>
-</main></body></html>
+</main>
+<dialog id="activity-panel" aria-labelledby="activity-heading">
+  <header class="activity-panel-header">
+    <div><h2 id="activity-heading">Agent activity</h2><p id="panel-status">Ready to check your site</p></div>
+    <button id="close-activity" type="button" autofocus>Close <span aria-hidden="true">×</span></button>
+  </header>
+  <div class="activity-panel-body">
+    <h3>Agents</h3>
+    <p id="agents-empty" class="activity-muted">Agent updates will appear when checks start.</p>
+    <ul id="agent-activity" class="activity-list"></ul>
+    <h3>Recent updates</h3>
+    <p class="activity-muted">Updates observed while this page is open. Latest updates appear at the bottom.</p>
+    <p id="events-empty" class="activity-muted">No activity yet.</p>
+    <ol id="activity-events" class="activity-list activity-events"></ol>
+    <details class="activity-disclosure"><summary>Check coverage</summary><ul id="activity-coverage" class="activity-list"></ul></details>
+    <details class="activity-disclosure"><summary>Technical details</summary><p id="activity-usage">No usage yet.</p><ul id="activity-technical" class="activity-list"></ul></details>
+  </div>
+</dialog>
+</body></html>

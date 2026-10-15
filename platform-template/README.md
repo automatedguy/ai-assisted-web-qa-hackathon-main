@@ -23,6 +23,10 @@ The practice site must be running at `SITE_URL` (default http://localhost:8080).
   also rejects requests while an audit or crawl is running.
 - Review findings by category and mark them verified, dismissed, or escalated.
   Review actions become available after the audit finishes.
+- Finding cards separate severity, category, review status, evidence, and corrections.
+  Long evidence expands with **Show more**; **Details** contains confidence and element
+  location. Page links open in a new tab. Reviews update the existing card, preserving
+  its position and expanded content; save failures appear inline without changing status.
 - A compact activity bar shows progress and findings. Failed, skipped, and unrun
   checks remain visible even when the activity panel is closed.
 - **View activity** opens a side panel with agent statuses and recent updates.

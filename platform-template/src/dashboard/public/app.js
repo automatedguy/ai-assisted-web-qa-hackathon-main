@@ -1,4 +1,5 @@
 import { createActivityView, categoryNames } from './activity.js';
+import { createIssuesView } from './issues-view.js';
 const $ = selector => document.querySelector(selector);
 const auditButton = $('#audit');
 const crawlButton = $('#crawl');
@@ -9,6 +10,17 @@ let issues = [];
 let auditActive = false;
 let reviewBusy = false;
 let viewVersion = 0;
+let pageTitles = new Map();
+const issuesView = createIssuesView(document, async (issue, status) => {
+  reviewBusy = true; busy(auditActive); renderIssues();
+  try {
+    const updated = await api('/api/issues/' + encodeURIComponent(issue.id) + '/status', {
+      method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ status }),
+    });
+    const current = issues.find(item => item.id === issue.id);
+    if (current) current.status = updated.status;
+  } finally { reviewBusy = false; busy(auditActive); renderIssues(); }
+});
 const categories = ['spelling_grammar', 'formatting', 'links', 'locale_rules', 'brand_voice', 'translation_quality', 'terminology', 'media'];
 for (const category of categories) {
   const option = document.createElement('option'); option.value = category; option.textContent = categoryNames[category];
@@ -36,6 +48,7 @@ function crawlSummary(crawl) {
   return `${successful} successful ${successful === 1 ? 'page' : 'pages'} · ${broken} broken ${broken === 1 ? 'destination' : 'destinations'}`;
 }
 function renderPages(crawl) {
+  pageTitles = new Map((crawl?.pages || []).map(page => [page.url, page.title]));
   $('#pages').replaceChildren();
   $('#broken-pages').replaceChildren();
   $('#broken-destinations').hidden = true;
@@ -89,41 +102,7 @@ function renderCrawl(crawl, durationMs) {
   renderPages(crawl); renderIssues();
 }
 function renderIssues() {
-  if (reviewBusy) return;
-  $('#issues').replaceChildren();
-  const filtered = issues.filter(issue => $('#category').value === 'all' || issue.category === $('#category').value);
-  $('#issue-summary').textContent = `${filtered.length} shown / ${issues.length} total findings.`;
-  for (const issue of filtered) {
-    const item = document.createElement('li'); const heading = document.createElement('strong');
-    heading.textContent = `${issue.severity.toUpperCase()} · ${issue.category} · ${issue.description}`; item.append(heading);
-    for (const text of [
-      'Evidence: ' + issue.evidence, 'Page: ' + issue.location.page_url,
-      'Status: ' + issue.status + ' · Confidence: ' + Math.round(issue.confidence * 100) + '%',
-      ...(issue.expected ? ['Expected: ' + issue.expected] : []),
-      ...(issue.suggested_fix ? ['Suggested fix: ' + issue.suggested_fix] : []),
-    ]) {
-      const p = document.createElement('p'); p.textContent = text;
-      if (text.startsWith('Evidence: ')) p.style.whiteSpace = 'pre-wrap';
-      item.append(p);
-    }
-    for (const [status, label] of [['verified', 'Verify'], ['dismissed', 'Dismiss'], ['escalated', 'Escalate']]) {
-      const button = document.createElement('button'); button.textContent = label; button.disabled = auditActive || status === issue.status;
-      button.addEventListener('click', async () => {
-        reviewBusy = true;
-        for (const control of $('#issues').querySelectorAll('button')) control.disabled = true;
-        busy(auditActive);
-        try {
-          const updated = await api('/api/issues/' + encodeURIComponent(issue.id) + '/status', {
-            method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ status }),
-          });
-          issue.status = updated.status;
-        } catch (error) { $('#message').textContent = error.message; }
-        finally { reviewBusy = false; busy(auditActive); renderIssues(); }
-      });
-      item.append(button);
-    }
-    $('#issues').append(item);
-  }
+  issuesView.render(issues, { category: $('#category').value, disabled: auditActive || reviewBusy, pageTitles });
 }
 function renderAudit(audit) {
   busy(audit.status === 'running');
@@ -154,7 +133,7 @@ async function pollAudit() {
 }
 auditButton.addEventListener('click', async () => {
   viewVersion++; clearTimeout(pollTimer);
-  busy(true); $('#message').textContent = '';
+  busy(true); renderIssues(); $('#message').textContent = '';
   try { renderAudit(await api('/api/audits', { method: 'POST' })); await pollAudit(); }
   catch (error) { $('#message').textContent = error.message; busy(false); await pollAudit(); }
 });

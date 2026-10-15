@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { activitySummary, workerActivity } from '../src/dashboard/public/activity.js';
+import { activitySummary, workerActivity, categoryNames } from '../src/dashboard/public/activity.js';
 
 const worker = (overrides = {}) => ({
   id: 'language-home', agent: 'language', categories: ['spelling_grammar'], status: 'completed',
@@ -60,4 +60,28 @@ test('human-readable activity includes retry attempts, skip reasons and retained
   assert.match(workerActivity(worker({ status: 'skipped', message: 'No configured rules.' })), /skipped. No configured rules/);
   assert.match(workerActivity(worker({ status: 'failed', issueCount: 1, message: 'Request failed.' })), /Request failed. 1 finding retained/);
   assert.equal(activitySummary(null).tone, 'idle');
+});
+
+test('media on a page without images or videos is neutral and not applicable', () => {
+  const noMedia = worker({ agent: 'media', categories: ['media'], status: 'skipped',
+    pageUrl: 'https://example.test/pricing.html', message: 'No image or video elements found.' });
+  const result = activitySummary(run({ workers: [worker({ categories: Object.keys(categoryNames) }), noMedia] }));
+  assert.equal(result.attention, '');
+  assert.equal(result.note, '1 check not applicable · /pricing.html: no images or videos.');
+  assert.equal(result.tone, 'complete');
+  assert.equal(result.coverage.find(entry => entry.category === 'media').text, '1 completed · 1 not applicable');
+  assert.match(workerActivity(noMedia), /not applicable — no images or videos on this page/);
+});
+
+test('inapplicable media does not hide missing references, unsupported resources or failures', () => {
+  const result = activitySummary(run({ status: 'partial', workers: [
+    worker({ agent: 'media', categories: ['media'], status: 'skipped', message: 'No image or video elements found.' }),
+    worker({ agent: 'translation-quality', categories: ['translation_quality'], status: 'skipped', message: 'No reference_content mapping for this page; translation quality was not checked.' }),
+    worker({ agent: 'media', categories: ['media'], status: 'skipped', message: 'Unsupported media.' }),
+    worker({ agent: 'media', categories: ['media'], status: 'failed', message: 'Resource limit reached.' }),
+  ] }));
+  assert.match(result.attention, /2 checks skipped/);
+  assert.match(result.attention, /1 check needs attention/);
+  assert.match(result.note, /1 check not applicable/);
+  assert.equal(result.tone, 'warning');
 });

@@ -15,11 +15,16 @@ const pageOf = worker => {
   catch { return worker.pageUrl; }
 };
 const seconds = value => Number.isFinite(value) ? `${(value / 1000).toFixed(1)}s` : 'Unavailable';
+// Only the explicit no-media result is inapplicable. Missing configuration,
+// unsupported resources, and other skipped work must remain visible as such.
+const displayStatus = worker => worker.status === 'skipped' && worker.agent === 'media' &&
+  worker.message === 'No image or video elements found.' ? 'not applicable' : worker.status;
 
 export function workerActivity(worker) {
   const subject = `${nameOf(worker)} · ${pageOf(worker)}`;
   if (worker.status === 'queued') return `${subject}: waiting to start.`;
   if (worker.status === 'running') return `${subject}: reviewing${worker.attempts > 1 ? ` (attempt ${worker.attempts})` : ''}.`;
+  if (displayStatus(worker) === 'not applicable') return `${subject}: not applicable — no images or videos on this page.`;
   if (worker.status === 'skipped') return `${subject}: skipped. ${worker.message || 'This check did not run.'}`;
   if (worker.status === 'failed' || worker.status === 'partial') {
     return `${subject}: ${worker.status === 'partial' ? 'incomplete' : 'needs attention'}. ${worker.message || 'The check could not finish.'}` +
@@ -34,13 +39,14 @@ export function activitySummary(run) {
   const workers = run.workers || [];
   const active = workers.filter(worker => worker.status === 'running').length;
   const failed = workers.filter(worker => ['failed', 'partial'].includes(worker.status)).length;
-  const skipped = workers.filter(worker => worker.status === 'skipped').length;
+  const skipped = workers.filter(worker => displayStatus(worker) === 'skipped').length;
+  const notApplicable = workers.filter(worker => displayStatus(worker) === 'not applicable');
   const running = run.status === 'running';
   const linksOnly = run.kind === 'crawl';
   const coverage = Object.entries(categoryNames).map(([category, label]) => {
     const applicable = workers.filter(worker => worker.categories.includes(category));
-    const counts = ['completed', 'running', 'queued', 'failed', 'partial', 'skipped']
-      .map(status => ({ status, total: applicable.filter(worker => worker.status === status).length }))
+    const counts = ['completed', 'running', 'queued', 'failed', 'partial', 'skipped', 'not applicable']
+      .map(status => ({ status, total: applicable.filter(worker => displayStatus(worker) === status).length }))
       .filter(entry => entry.total);
     const unavailable = run.coverage?.some(entry => entry.category === category && !entry.implemented);
     return { category, label, text: counts.length ? counts.map(entry => `${entry.total} ${entry.status}`).join(' · ') :
@@ -59,6 +65,8 @@ export function activitySummary(run) {
     status: `${title} ${state} · ${running ? `${count(active, 'check')} active · ` : ''}${count(run.issues.length, 'finding')}`,
     detail: run.error || (running ? run.phase : linksOnly ? 'Checked fetched destinations within this site.' : 'Review the findings below.'),
     attention: warnings.join(' · '), coverage,
+    note: notApplicable.length ? `${count(notApplicable.length, 'check')} not applicable` +
+      (notApplicable.length === 1 ? ` · ${pageOf(notApplicable[0])}: no images or videos.` : ' · No images or videos on these pages. See activity for details.') : '',
     tone: failed || ['failed', 'partial'].includes(run.status) ? 'warning' : running ? 'running' : 'complete',
   };
 }
@@ -93,6 +101,7 @@ export function createActivityView(document) {
       $('#activity-bar').dataset.state = summary.tone;
       setText('#activity-status', summary.status); setText('#activity-detail', summary.detail);
       setText('#activity-attention', summary.attention); $('#activity-attention').hidden = !summary.attention;
+      setText('#activity-note', summary.note || ''); $('#activity-note').hidden = !summary.note;
       setText('#panel-status', summary.status);
       const duration = run?.status === 'running' ? Date.now() - Date.parse(run.startedAt) : run?.durationMs;
       setText('#activity-duration', Number.isFinite(duration) ? seconds(duration) : '');
@@ -106,7 +115,7 @@ export function createActivityView(document) {
           if (previousWorkers.get(worker.id) !== fingerprint && worker.status !== 'queued') event(workerActivity(worker));
           previousWorkers.set(worker.id, fingerprint);
         }
-        if (run.status !== previousStatus && run.status !== 'running') event(summary.status + (summary.attention ? '. ' + summary.attention : ''));
+        if (run.status !== previousStatus && run.status !== 'running') event(summary.status + (summary.attention ? '. ' + summary.attention : '') + (summary.note ? '. ' + summary.note : ''));
         previousPhase = run.phase; previousStatus = run.status;
       }
       events = events.slice(-60);
@@ -117,8 +126,8 @@ export function createActivityView(document) {
       const agents = [...new Set(workers.map(worker => worker.agent))];
       updateList('#agent-activity', agents.map(agent => {
         const reports = workers.filter(worker => worker.agent === agent);
-        const counts = ['running', 'queued', 'completed', 'failed', 'partial', 'skipped'].map(status => {
-          const total = reports.filter(worker => worker.status === status).length;
+        const counts = ['running', 'queued', 'completed', 'failed', 'partial', 'skipped', 'not applicable'].map(status => {
+          const total = reports.filter(worker => displayStatus(worker) === status).length;
           return total ? `${total} ${status === 'queued' ? 'waiting' : status === 'partial' ? 'incomplete' : status}` : '';
         }).filter(Boolean);
         const active = reports.filter(worker => worker.status === 'running').map(pageOf);
@@ -133,7 +142,7 @@ export function createActivityView(document) {
       setText('#activity-usage', run ? `Reported tokens: ${input} input / ${output} output · Estimated cost: ${cost}` +
         (workers.some(worker => !worker.usageComplete) ? ' · Some usage is unknown.' : '') : 'No usage yet.');
       const technical = workers.map(worker => `${nameOf(worker)} · ${worker.pageUrl || 'site'}\n` +
-        `${worker.status} · ${count(worker.attempts, 'attempt')} · Duration: ${seconds(worker.durationMs)} · ${count(worker.issueCount, 'finding')}\n` +
+        `${displayStatus(worker)} · ${count(worker.attempts, 'attempt')} · Duration: ${seconds(worker.durationMs)} · ${count(worker.issueCount, 'finding')}\n` +
         `Tokens: ${worker.inputTokens} in / ${worker.outputTokens} out · ${worker.model || 'No model reported'}\n` +
         (worker.message || '') + (worker.mediaChecks?.length ? '\n' + worker.mediaChecks.map(check => `${check.check} · ${check.status} · ${check.asset} · ${check.message}`).join('\n') : ''));
       if (run?.error) technical.unshift(run.error);

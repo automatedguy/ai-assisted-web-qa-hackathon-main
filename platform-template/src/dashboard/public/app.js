@@ -16,17 +16,71 @@ async function api(url, options) {
   return data;
 }
 function busy(value) { auditActive = value; auditButton.disabled = value; crawlButton.disabled = value; }
+function crawlSummary(crawl) {
+  const successful = crawl.pages.filter(page => page.status >= 200 && page.status < 300).length;
+  const broken = crawl.responses.filter(response => response.status >= 400).length;
+  return `${successful} successful ${successful === 1 ? 'page' : 'pages'} · ${broken} broken ${broken === 1 ? 'destination' : 'destinations'}`;
+}
 function renderPages(crawl) {
   $('#pages').replaceChildren();
+  $('#broken-pages').replaceChildren();
+  $('#broken-destinations').hidden = true;
   if (!crawl) { $('#crawl-status').textContent = ''; return; }
-  const failed = crawl.responses.filter(item => item.status < 200 || item.status >= 400).length;
-  $('#crawl-status').textContent = `${crawl.pages.length} HTML pages crawled; ${failed} unsuccessful HTTP responses; ${crawl.errors.length} crawl failures.` +
+  $('#crawl-status').textContent = `${crawlSummary(crawl)} · ${crawl.errors.length} crawl failures.` +
     (crawl.limitReached ? ' Page limit reached: coverage is incomplete.' : '');
-  for (const page of crawl.pages) {
+  const successfulPages = crawl.pages.filter(page => page.status >= 200 && page.status < 300);
+  for (const page of successfulPages) {
     const item = document.createElement('li'); const link = document.createElement('a');
     link.href = page.url; link.textContent = page.title || page.url; link.target = '_blank'; link.rel = 'noopener noreferrer';
-    item.append(link, ` — HTTP ${page.status}, ${page.links.length} links`); $('#pages').append(item);
+    const info = document.createElement('p'); info.className = 'page-info';
+    info.textContent = `${page.url} · ${page.links.length} links on this page`;
+    item.append(link, info); $('#pages').append(item);
   }
+  if (!successfulPages.length) {
+    const item = document.createElement('li'); item.textContent = 'No successfully loaded pages yet.';
+    $('#pages').append(item);
+  }
+  const broken = crawl.responses.filter(response => response.status >= 400);
+  $('#broken-destinations').hidden = broken.length === 0;
+  for (const destination of broken) {
+    const item = document.createElement('li'); const link = document.createElement('a');
+    link.href = destination.url; link.textContent = destination.url; link.target = '_blank'; link.rel = 'noopener noreferrer';
+    const status = document.createElement('strong'); status.className = 'destination-error';
+    status.textContent = destination.status === 404 ? 'Page not found (HTTP 404)' : `HTTP error ${destination.status}`;
+    item.append(status, link);
+    const sources = successfulPages.filter(page => page.links.some(link => link.href === destination.url));
+    if (sources.length) {
+      const info = document.createElement('p'); info.className = 'page-info'; info.append('Linked from: ');
+      sources.forEach((page, index) => {
+        if (index) info.append(', ');
+        const source = document.createElement('a'); source.href = page.url; source.textContent = page.title || page.url;
+        source.target = '_blank'; source.rel = 'noopener noreferrer'; info.append(source);
+      });
+      item.append(info);
+    }
+    $('#broken-pages').append(item);
+  }
+}
+function renderCrawl(crawl, durationMs) {
+  const partial = crawl.errors.length > 0 || crawl.limitReached || !crawl.pages.some(page => page.status >= 200 && page.status < 300);
+  const duration = durationMs === undefined ? 'Unavailable' : (durationMs / 1000).toFixed(1) + 's';
+  $('#audit-status').textContent = `${partial ? 'PARTIAL' : 'COMPLETED'} · Crawl and link check · ${crawlSummary(crawl)} · ${issues.length} link ${issues.length === 1 ? 'finding' : 'findings'}.`;
+  $('#workers').replaceChildren();
+  const row = document.createElement('tr');
+  for (const text of ['links · site', partial ? 'partial' : 'completed', 1, duration, issues.length, '0 / 0',
+    'Checked fetched same-origin destinations for HTTP errors.']) {
+    const cell = document.createElement('td'); cell.textContent = text; row.append(cell);
+  }
+  $('#workers').append(row);
+  $('#coverage').replaceChildren();
+  for (const category of categories) {
+    const item = document.createElement('li');
+    item.textContent = category + (category === 'links' ? ' — ran' : ' — not run');
+    $('#coverage').append(item);
+  }
+  $('#usage').textContent = 'No model requests · 0 tokens · Cost: $0';
+  renderPages(crawl);
+  renderIssues();
 }
 function renderIssues() {
   if (reviewBusy) return;
@@ -111,7 +165,10 @@ async function pollAudit() {
     if (audit) { renderAudit(audit); if (audit.status === 'running') pollTimer = setTimeout(pollAudit, 1000); }
     else {
       busy(false); $('#audit-status').textContent = 'No audit in this server session.';
-      issues = await api('/api/issues'); renderIssues(); renderPages(await api('/api/pages'));
+      issues = await api('/api/issues');
+      const crawl = await api('/api/pages');
+      if (crawl.responses.length || crawl.errors.length) renderCrawl(crawl);
+      else { renderIssues(); renderPages(crawl); }
     }
   } catch (error) {
     $('#message').textContent = 'Could not refresh audit: ' + error.message;
@@ -124,14 +181,22 @@ auditButton.addEventListener('click', async () => {
   catch (error) { $('#message').textContent = error.message; busy(false); await pollAudit(); }
 });
 crawlButton.addEventListener('click', async () => {
+  clearTimeout(pollTimer);
+  const started = performance.now();
   busy(true); $('#message').textContent = 'Crawling pages and checking links…';
+  crawlButton.textContent = 'Checking links…';
+  $('#audit-status').textContent = 'RUNNING · Crawling pages and checking links…';
+  $('#workers').replaceChildren(); $('#coverage').replaceChildren(); $('#usage').textContent = '';
+  $('#category').value = 'all';
+  renderIssues();
   try {
-    const crawl = await api('/api/crawl', { method: 'POST' }); renderPages(crawl); issues = crawl.issues;
-    $('#audit-status').textContent = 'Crawl and links only. Language, Locale/Formatting, Brand/Terminology, Translation Quality, and Media agents were not run.';
-    $('#workers').replaceChildren(); $('#coverage').replaceChildren(); $('#usage').textContent = '';
-    $('#message').textContent = '';
-  } catch (error) { $('#message').textContent = error.message; }
-  finally { busy(false); renderIssues(); }
+    const crawl = await api('/api/crawl', { method: 'POST' }); issues = crawl.issues;
+    renderCrawl(crawl, performance.now() - started);
+    $('#message').textContent = `Link check finished: ${issues.length} ${issues.length === 1 ? 'finding' : 'findings'}. See Findings below.`;
+  } catch (error) {
+    $('#audit-status').textContent = 'FAILED · Crawl and link check';
+    $('#message').textContent = error.message;
+  } finally { crawlButton.textContent = 'Crawl and check links only'; busy(false); renderIssues(); }
 });
 $('#category').addEventListener('change', renderIssues);
 $('#test').addEventListener('click', async () => {

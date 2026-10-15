@@ -12,3 +12,9 @@ td:first-child { max-width: 320px; overflow-wrap: anywhere; }
 #issues p, #message { overflow-wrap: anywhere; } #coverage { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; list-style: none; }
 #coverage li { padding: 6px 10px; background: #eef2f8; border-radius: 5px; font-size: .85rem; }
 a { color: #245ad3; } pre { white-space: pre-wrap; }
+.page-list { list-style: none; padding: 0; }
+.page-list li { padding: 12px 0; overflow-wrap: anywhere; }
+.page-list li + li { border-top: 1px solid #e5e9f0; }
+.page-info { margin: 5px 0 0; color: #526078; font-size: .9rem; }
+#broken-destinations { margin-top: 20px; padding: 0 16px; border: 1px solid #edc5c1; border-radius: 8px; background: #fff8f7; }
+.destination-error { display: block; margin-bottom: 5px; color: #9c2c23; }

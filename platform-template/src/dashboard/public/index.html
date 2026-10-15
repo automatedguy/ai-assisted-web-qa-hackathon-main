@@ -21,7 +21,16 @@
       <tbody id="workers"></tbody>
     </table></div>
   </section>
-  <section><h2>Pages</h2><p id="crawl-status"></p><ul id="pages"></ul></section>
+  <section aria-labelledby="pages-heading">
+    <h2 id="pages-heading">Pages and link destinations</h2>
+    <p id="crawl-status"></p>
+    <h3>Successfully loaded pages</h3><ul id="pages" class="page-list"></ul>
+    <div id="broken-destinations" hidden>
+      <h3>Broken destinations</h3>
+      <p>These URLs returned HTTP errors. They are not included in the successful page count.</p>
+      <ul id="broken-pages" class="page-list"></ul>
+    </div>
+  </section>
   <section aria-labelledby="issues-heading">
     <h2 id="issues-heading">Findings</h2>
     <label>Category <select id="category"><option value="all">All categories</option></select></label>

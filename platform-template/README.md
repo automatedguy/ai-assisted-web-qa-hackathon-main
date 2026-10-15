@@ -17,6 +17,10 @@ The practice site must be running at `SITE_URL` (default http://localhost:8080).
   model must support image inputs for visual checks.
 - **Crawl and check links only** runs the existing deterministic check without
   model requests.
+- **Clear results** removes the current audit, crawled pages, findings, and review
+  decisions from the server and dashboard. Results stay cleared after a refresh.
+  Clearing is disabled during checks and review updates; `DELETE /api/results`
+  also rejects requests while an audit or crawl is running.
 - Review findings by category and mark them verified, dismissed, or escalated.
   Review actions become available after the audit finishes.
 - The progress table shows worker categories, status, model, attempts, duration, findings,

@@ -50,6 +50,17 @@ app.get("/api/issues", (_request, response) => {
   response.json(latestIssues);
 });
 
+app.delete("/api/results", (_request, response) => {
+  if (crawling || latestAudit?.status === "running") {
+    response.status(409).json({ error: "Wait for the current audit or crawl to finish before clearing results." });
+    return;
+  }
+  latestAudit = null;
+  latestCrawl = null;
+  latestIssues = [];
+  response.json({ message: "Results cleared." });
+});
+
 app.patch("/api/issues/:id/status", (request, response) => {
   const { status } = request.body as { status?: unknown };
   if (!["verified", "dismissed", "escalated"].includes(String(status))) {

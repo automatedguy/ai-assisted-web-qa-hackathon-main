@@ -1,9 +1,11 @@
 const $ = selector => document.querySelector(selector);
 const auditButton = $('#audit');
 const crawlButton = $('#crawl');
+const clearButton = $('#clear');
 let issues = [];
 let auditActive = false;
 let reviewBusy = false;
+let viewVersion = 0;
 const categories = ['spelling_grammar', 'formatting', 'links', 'locale_rules', 'brand_voice', 'translation_quality', 'terminology', 'media'];
 for (const category of categories) {
   const option = document.createElement('option'); option.value = category; option.textContent = category;
@@ -15,7 +17,17 @@ async function api(url, options) {
   if (!response.ok) throw new Error(data.error || 'Request failed.');
   return data;
 }
-function busy(value) { auditActive = value; auditButton.disabled = value; crawlButton.disabled = value; }
+function busy(value) {
+  auditActive = value;
+  for (const button of [auditButton, crawlButton, clearButton]) button.disabled = value || reviewBusy;
+}
+function renderEmpty() {
+  issues = [];
+  $('#category').value = 'all';
+  $('#audit-status').textContent = 'No results. Run an audit or check links to get started.';
+  $('#workers').replaceChildren(); $('#coverage').replaceChildren(); $('#usage').textContent = '';
+  renderPages(null); renderIssues();
+}
 function crawlSummary(crawl) {
   const successful = crawl.pages.filter(page => page.status >= 200 && page.status < 300).length;
   const broken = crawl.responses.filter(response => response.status >= 400).length;
@@ -105,7 +117,7 @@ function renderIssues() {
       button.addEventListener('click', async () => {
         reviewBusy = true;
         for (const control of $('#issues').querySelectorAll('button')) control.disabled = true;
-        auditButton.disabled = true; crawlButton.disabled = true;
+        busy(auditActive);
         try {
           const updated = await api('/api/issues/' + encodeURIComponent(issue.id) + '/status', {
             method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ status }),
@@ -160,27 +172,33 @@ function renderAudit(audit) {
 let pollTimer;
 async function pollAudit() {
   clearTimeout(pollTimer);
+  const version = viewVersion;
   try {
     const audit = await api('/api/audits/latest');
+    if (version !== viewVersion) return;
     if (audit) { renderAudit(audit); if (audit.status === 'running') pollTimer = setTimeout(pollAudit, 1000); }
     else {
-      busy(false); $('#audit-status').textContent = 'No audit in this server session.';
-      issues = await api('/api/issues');
+      const loadedIssues = await api('/api/issues');
       const crawl = await api('/api/pages');
+      if (version !== viewVersion) return;
+      busy(false); issues = loadedIssues;
       if (crawl.responses.length || crawl.errors.length) renderCrawl(crawl);
-      else { renderIssues(); renderPages(crawl); }
+      else renderEmpty();
     }
   } catch (error) {
+    if (version !== viewVersion) return;
     $('#message').textContent = 'Could not refresh audit: ' + error.message;
     if (auditActive) pollTimer = setTimeout(pollAudit, 3000);
   }
 }
 auditButton.addEventListener('click', async () => {
+  viewVersion++; clearTimeout(pollTimer);
   busy(true); $('#message').textContent = '';
   try { renderAudit(await api('/api/audits', { method: 'POST' })); await pollAudit(); }
   catch (error) { $('#message').textContent = error.message; busy(false); await pollAudit(); }
 });
 crawlButton.addEventListener('click', async () => {
+  viewVersion++;
   clearTimeout(pollTimer);
   const started = performance.now();
   busy(true); $('#message').textContent = 'Crawling pages and checking links…';
@@ -197,6 +215,19 @@ crawlButton.addEventListener('click', async () => {
     $('#audit-status').textContent = 'FAILED · Crawl and link check';
     $('#message').textContent = error.message;
   } finally { crawlButton.textContent = 'Crawl and check links only'; busy(false); renderIssues(); }
+});
+clearButton.addEventListener('click', async () => {
+  viewVersion++; clearTimeout(pollTimer);
+  busy(true); renderIssues(); clearButton.textContent = 'Clearing…';
+  $('#message').textContent = '';
+  try {
+    await api('/api/results', { method: 'DELETE' });
+    busy(false); renderEmpty();
+    $('#message').textContent = 'Results and review decisions cleared.';
+  } catch (error) {
+    $('#message').textContent = 'Could not clear results: ' + error.message;
+    busy(false); await pollAudit();
+  } finally { clearButton.textContent = 'Clear results'; renderIssues(); }
 });
 $('#category').addEventListener('change', renderIssues);
 $('#test').addEventListener('click', async () => {

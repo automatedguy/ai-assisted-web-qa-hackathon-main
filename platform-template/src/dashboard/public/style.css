@@ -1,5 +1,8 @@
 body { margin: 0; font-family: system-ui, sans-serif; color: #17243a; background: #f5f7fb; }
 main { max-width: 1120px; margin: 32px auto; padding: 0 24px; }
+.brand-header { display: flex; align-items: center; gap: 24px; }
+.brand-header h1 { margin: 0; }
+.brand-logo { display: block; flex: 0 0 auto; width: 160px; height: 90px; object-fit: contain; background: #000; border-radius: 8px; }
 section, details { margin: 24px 0; padding: 20px; background: white; border: 1px solid #d9e0eb; border-radius: 10px; }
 h1, h2 { margin-top: 0; } h2 { font-size: 1.25rem; }
 button, select { padding: 9px 14px; margin: 4px; font: inherit; border: 1px solid #becada; border-radius: 6px; background: white; cursor: pointer; }
@@ -45,6 +48,8 @@ button:focus-visible, summary:focus-visible, a:focus-visible { outline: 3px soli
 @media (prefers-reduced-motion: reduce) { .activity-dot { animation: none !important; } }
 @media (max-width: 600px) {
   main { padding: 0 16px; }
+  .brand-header { flex-direction: column; align-items: flex-start; gap: 16px; }
+  .brand-header h1 { font-size: 1.75rem; }
   .activity-bar { flex-wrap: wrap; padding: 16px; gap: 12px; }
   .activity-copy { flex-basis: calc(100% - 28px); }
   #view-activity { margin-left: 25px; }

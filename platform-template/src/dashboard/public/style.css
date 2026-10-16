@@ -28,6 +28,9 @@ main { max-width: 1168px; margin: 28px auto 48px; padding: 0 24px; }
 #message:empty { display: none; }
 #message { font-size: .875rem; margin: 14px 0 0; }
 section, details { margin: 20px 0; padding: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.section-heading h2 { margin-bottom: 4px; }
+.section-heading p { margin: 0; color: var(--muted); font-size: .875rem; }
 h1, h2 { margin-top: 0; }
 h2 { font-size: 1.125rem; letter-spacing: -.02em; margin-bottom: 12px; }
 h3 { font-size: .9375rem; font-weight: 650; }
@@ -42,6 +45,14 @@ button:disabled { opacity: .5; cursor: default; }
 summary { cursor: pointer; font-weight: 600; }
 #crawl-status, #issue-summary { color: var(--muted); font-size: .875rem; }
 #issues { padding: 0; list-style: none; display: grid; gap: 16px; }
+.category-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 22px; }
+.category-card { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "title count" "label count" "breakdown breakdown"; gap: 3px 10px; min-height: 126px; margin: 0; padding: 16px; text-align: left; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.category-card:hover:not(:disabled), .category-card-active { border-color: var(--accent); background: var(--accent-soft); }
+.category-card strong { grid-area: title; font-size: .875rem; line-height: 1.35; }
+.category-card-count { grid-area: count; align-self: center; color: var(--accent); font-size: 2rem; line-height: 1; font-weight: 700; }
+.category-card-label { grid-area: label; color: var(--muted); font-size: .75rem; }
+.category-card-breakdown { grid-area: breakdown; align-self: end; color: var(--muted); font-size: .72rem; line-height: 1.35; }
+#view-all-findings, #back-to-categories { margin: 0; padding: 8px 12px; white-space: nowrap; }
 .issue-card { min-width: 0; padding: 22px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); overflow-wrap: anywhere; }
 .issue-card[hidden] { display: none; }
 .issue-card-header, .issue-classification { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
@@ -132,6 +143,8 @@ button:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visib
   .issue-card { padding: 16px; }
   .issue-evidence { padding: 12px; }
   .issue-page { flex-basis: 100%; }
+  .category-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .section-heading { align-items: stretch; flex-direction: column; }
   .audit-actions { gap: 8px; }
   .audit-actions button { padding: 10px 12px; }
   .activity-bar { flex-wrap: wrap; padding: 16px; gap: 12px; }

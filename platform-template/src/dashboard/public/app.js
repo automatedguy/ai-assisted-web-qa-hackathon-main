@@ -11,6 +11,7 @@ let auditActive = false;
 let reviewBusy = false;
 let viewVersion = 0;
 let pageTitles = new Map();
+let selectedCategory = 'all';
 const issuesView = createIssuesView(document, async (issue, status) => {
   reviewBusy = true; busy(auditActive); renderIssues();
   try {
@@ -22,10 +23,7 @@ const issuesView = createIssuesView(document, async (issue, status) => {
   } finally { reviewBusy = false; busy(auditActive); renderIssues(); }
 });
 const categories = ['spelling_grammar', 'formatting', 'links', 'locale_rules', 'brand_voice', 'translation_quality', 'terminology', 'media'];
-for (const category of categories) {
-  const option = document.createElement('option'); option.value = category; option.textContent = categoryNames[category];
-  $('#category').append(option);
-}
+const severityOrder = ['critical', 'major', 'minor', 'suggestion'];
 async function api(url, options) {
   const response = await fetch(url, options);
   const data = await response.json();
@@ -38,9 +36,34 @@ function busy(value) {
 }
 function renderEmpty() {
   issues = [];
-  $('#category').value = 'all';
+  selectedCategory = 'all';
   crawlRun = undefined; activity.render(null);
-  renderPages(null); renderIssues();
+  renderPages(null); renderCategoryCards(); renderIssues();
+}
+function renderCategoryCards() {
+  const cards = $('#category-cards'); cards.replaceChildren();
+  const total = issues.length;
+  $('#category-summary').textContent = total ? `${total} total ${total === 1 ? 'finding' : 'findings'} across ${categories.length} categories.` : 'Run an audit to see findings by category.';
+  for (const category of categories) {
+    const categoryIssues = issues.filter(issue => issue.category === category);
+    const card = document.createElement('button'); card.type = 'button'; card.className = 'category-card';
+    card.dataset.category = category; card.classList.toggle('category-card-active', selectedCategory === category);
+    const title = document.createElement('strong'); title.textContent = categoryNames[category] || category;
+    const count = document.createElement('span'); count.className = 'category-card-count'; count.textContent = String(categoryIssues.length);
+    const label = document.createElement('span'); label.className = 'category-card-label'; label.textContent = categoryIssues.length === 1 ? 'finding' : 'findings';
+    const breakdown = document.createElement('span'); breakdown.className = 'category-card-breakdown';
+    const severityCounts = severityOrder.map(severity => `${categoryIssues.filter(issue => issue.severity === severity).length} ${severity}`).filter(value => !value.startsWith('0 '));
+    breakdown.textContent = severityCounts.length ? severityCounts.join(' · ') : 'No findings';
+    card.append(title, count, label, breakdown);
+    card.addEventListener('click', () => showCategory(category));
+    cards.append(card);
+  }
+}
+function showCategory(category) {
+  selectedCategory = category;
+  renderCategoryCards(); renderIssues();
+  $('#findings-detail').hidden = false;
+  $('#findings-detail').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 function crawlSummary(crawl) {
   const successful = crawl.pages.filter(page => page.status >= 200 && page.status < 300).length;
@@ -99,15 +122,17 @@ function renderCrawl(crawl, durationMs) {
       message: partial ? 'Some destinations could not be checked. See crawl details.' : 'Checked fetched same-origin destinations for HTTP errors.' }],
   };
   activity.render(crawlRun);
-  renderPages(crawl); renderIssues();
+  renderPages(crawl); renderCategoryCards(); renderIssues();
 }
 function renderIssues() {
-  issuesView.render(issues, { category: $('#category').value, disabled: auditActive || reviewBusy, pageTitles });
+  $('#findings-detail').hidden = selectedCategory === 'all' || issues.length === 0;
+  $('#issues-heading').textContent = selectedCategory === 'all' ? 'All findings' : `${categoryNames[selectedCategory] || selectedCategory} findings`;
+  issuesView.render(issues, { category: selectedCategory, disabled: auditActive || reviewBusy, pageTitles });
 }
 function renderAudit(audit) {
   busy(audit.status === 'running');
   activity.render(audit);
-  renderPages(audit.crawl); issues = audit.issues; renderIssues();
+  renderPages(audit.crawl); issues = audit.issues; renderCategoryCards(); renderIssues();
 }
 let pollTimer;
 async function pollAudit() {
@@ -151,7 +176,8 @@ crawlButton.addEventListener('click', async () => {
     }],
   };
   activity.render(crawlRun);
-  $('#category').value = 'all';
+  selectedCategory = 'all';
+  renderCategoryCards();
   renderIssues();
   try {
     const crawl = await api('/api/crawl', { method: 'POST' }); issues = crawl.issues;
@@ -177,7 +203,10 @@ clearButton.addEventListener('click', async () => {
     busy(false); await pollAudit();
   } finally { clearButton.textContent = 'Clear results'; renderIssues(); }
 });
-$('#category').addEventListener('change', renderIssues);
+$('#back-to-categories').addEventListener('click', () => {
+  selectedCategory = 'all'; renderCategoryCards(); renderIssues();
+  $('#category-heading').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
 $('#test').addEventListener('click', async () => {
   $('#test').disabled = true; $('#result').textContent = 'Contacting OpenAI…';
   try { $('#result').textContent = (await api('/api/test-model', { method: 'POST' })).message; }

@@ -33,6 +33,10 @@
     </div>
     <button id="view-activity" type="button" aria-haspopup="dialog" aria-controls="activity-panel" aria-expanded="false">View activity <span aria-hidden="true">→</span></button>
   </section>
+  <section aria-labelledby="category-heading">
+    <div class="section-heading"><div><h2 id="category-heading">Findings by category</h2><p id="category-summary">Run an audit to see findings by category.</p></div></div>
+    <div id="category-cards" class="category-cards"></div>
+  </section>
   <section aria-labelledby="pages-heading">
     <h2 id="pages-heading">Pages and link destinations</h2>
     <p id="crawl-status"></p>
@@ -42,10 +46,6 @@
       <p>These URLs returned HTTP errors. They are not included in the successful page count.</p>
       <ul id="broken-pages" class="page-list"></ul>
     </div>
-  </section>
-  <section aria-labelledby="category-heading">
-    <div class="section-heading"><div><h2 id="category-heading">Findings by category</h2><p id="category-summary">Run an audit to see findings by category.</p></div></div>
-    <div id="category-cards" class="category-cards"></div>
   </section>
   <section id="findings-detail" aria-labelledby="issues-heading" hidden>
     <div class="section-heading"><div><h2 id="issues-heading">Category findings</h2><p id="issue-summary"></p></div><button id="back-to-categories" type="button">Back to categories</button></div>

@@ -1,0 +1,31 @@
+SKYNET — PRESENTACIÓN PRELIMINAR
+Estado del proyecto: 15 de octubre de 2026, commit 7c89229.
+
+ARCHIVOS PARA LA REUNIÓN
+- Skynet_Presentacion_Preliminar_2026-10-15.pptx: PowerPoint editable, 22 diapositivas.
+- Skynet_Presentacion_Preliminar_2026-10-15.pdf: copia para compartir, exportada con Keynote.
+- Skynet_Presentacion_Preliminar_2026-10-15_Notas.txt: guion de apoyo, también incluido en las notas del PPT.
+
+CONTENIDO
+20 diapositivas principales + 2 anexos técnicos. Duración sugerida: 15–20 minutos.
+Incluye stack, arquitectura, agentes, orquestación, workflow, interfaz, casos reales,
+validación, límites y próximos pasos. Las capturas corresponden a resultados reales
+del servidor local; no son mocks. No se modificaron los estados de revisión.
+
+EVIDENCIA
+evidencia.json registra las métricas de la corrida mostrada y la validación técnica.
+57 entradas TAP aprobadas (incluyen grupos); typecheck aprobado.
+22 hallazgos en 62,536 segundos es un smoke test, no un benchmark de precisión/recall.
+No se ejecutó una nueva auditoría paga para preparar este material.
+
+EDICIÓN Y REGENERACIÓN
+Abrir el .pptx en PowerPoint o Keynote. Textos, tablas y diagramas son editables;
+las capturas del dashboard son imágenes.
+generate.cjs reconstruye el PPT y las notas usando pptxgenjs. Las dependencias de
+presentación se instalaron en /tmp/skynet-deck-tools, sin alterar el package.json
+del proyecto. Para regenerar desde la raíz del repositorio:
+
+NODE_PATH=/tmp/skynet-deck-tools/node_modules node docs/presentations/skynet-preliminar-2026-10-15/generate.cjs
+
+Si esa carpeta temporal ya no existe, instalar pptxgenjs en una ubicación temporal
+y ajustar NODE_PATH. Tras regenerar, exportar nuevamente el PDF desde PowerPoint o Keynote.

@@ -1,0 +1,39 @@
+{
+  "commit": "7c89229",
+  "auditId": "f5c05166-8675-4828-817b-5920fd18f6b4",
+  "startedAt": "2026-10-15T16:57:06.815Z",
+  "status": "completed",
+  "durationMs": 62536,
+  "targetLocale": "es-ES",
+  "successfulPages": 3,
+  "brokenDestinations": 1,
+  "findings": 22,
+  "byCategory": {
+    "links": 1,
+    "spelling_grammar": 1,
+    "locale_rules": 4,
+    "formatting": 1,
+    "terminology": 3,
+    "brand_voice": 2,
+    "translation_quality": 4,
+    "media": 6
+  },
+  "workers": 16,
+  "workerStatuses": {
+    "completed": 15,
+    "skipped": 1
+  },
+  "skips": [
+    {
+      "agent": "media",
+      "pageUrl": "http://localhost:8080/pricing.html",
+      "reason": "No image or video elements found."
+    }
+  ],
+  "validation": {
+    "testEntries": 57,
+    "failures": 0,
+    "typecheck": "passed",
+    "note": "Includes parent groups; mocks are not an accuracy benchmark"
+  }
+}

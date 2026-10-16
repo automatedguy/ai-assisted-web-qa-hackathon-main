@@ -1,4 +1,4 @@
-# AI-Assisted Web QA Platform — Hackathon Starter Kit
+# AI-Assisted Web QA Platform
 
 ## Structure
 
@@ -9,6 +9,9 @@
 ├── linguistic-assets/
 │   └── practice-profile.yaml   # brand voice / locale / glossary rules for the practice site
 ├── reference-content/          # English source content, for translation-quality 
+├── platform-template/          # TypeScript/Express QA platform and dashboard
+├── docs/                       # issue schema, handoff notes, and presentation assets
+└── .env.example                # local configuration template
 ```
 
 ## Objective
@@ -37,7 +40,7 @@ specific practice site itself.
 - A multi-agent system, not a single prompt, that checks: spelling &
   grammar, formatting, links, locale-specific rules, brand voice,
   translation quality, terminology-in-context, and media (images/video) —
-  see `docs/CHECK_CATALOG.md` for detail on each.
+  see the check catalog below for details.
 - Issues that conform to `docs/ISSUE_SCHEMA.json`.
 - A review dashboard where a human can see what ran, browse issues, and
   mark each `verified`, `dismissed`, or `escalated`.
@@ -50,9 +53,8 @@ specific practice site itself.
   practice site.
 - `reference-content/*.md` — English source content, for translation-
   quality comparison against the target-locale site.
-- `platform-template/` — an empty scaffold for your platform. No starter
-  code is provided beyond folder placeholders and the Dockerfile contract
-  — build your own architecture from scratch, in any language.
+- `platform-template/` — the implemented TypeScript/Express platform, including
+  the coordinator, six agents, dashboard, tests, and Dockerfile.
 - `docker-compose.yml` — brings up the practice site and your platform
   together on a shared network.
 - `docs/` — this brief, the check catalog, the issue schema, and the
@@ -61,8 +63,8 @@ specific practice site itself.
 ## What's not provided (by design)
 
 - No answer key for the practice site's seeded issues.
-- No reference implementation or agent framework — `platform-template/` is
-  intentionally empty so architecture choices are yours.
+- No accuracy benchmark for the model-backed checks; use the seeded practice
+  site for smoke testing and review findings before the demo.
 
 ## Getting started
 
@@ -70,8 +72,9 @@ specific practice site itself.
 docker compose up --build
 ```
 
-This starts the practice site on `http://localhost:8080` and (once you've
-built it) your platform on `http://localhost:3000`.
+This starts the practice site on `http://localhost:8080` and the platform
+dashboard on `http://localhost:3000`. The platform requires `OPENAI_API_KEY`
+for model-backed audits; copy `.env.example` to `.env` and configure it first.
 
 See `platform-template/README.md` for the exact contract your platform
 must satisfy so organizers can swap in the demo site without touching your

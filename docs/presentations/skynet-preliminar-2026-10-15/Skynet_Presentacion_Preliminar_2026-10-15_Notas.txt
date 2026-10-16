@@ -1,0 +1,173 @@
+01. Skynet — Autonomous QA Platform
+
+Objetivo de la reunión: mostrar lo que ya funciona, explicar cómo está construido y acordar las prioridades. El nombre Autonomous se refiere a la ejecución de las comprobaciones: la decisión final sigue siendo humana. No se aplican correcciones al sitio automáticamente. Presentación sugerida: 15–20 minutos más preguntas; las dos últimas diapositivas son anexos.
+
+Fuentes: Repositorio 7c89229; aplicación local
+
+================================================================================
+
+02. Qué tenemos hoy
+
+Tenemos un prototipo funcional que cubre ocho categorías con seis módulos especializados. La corrida observada duró 62,536 segundos y produjo 22 hallazgos. Se visitaron tres páginas válidas y una respuesta HTML 404. Esto demuestra funcionamiento, no precisión/recall ni desempeño representativo. El despliegue y la persistencia aún requieren trabajo.
+
+Fuentes: Auditoría f5c05166 · 15/10/2026; código actual
+
+================================================================================
+
+03. El objetivo: QA de contenido reutilizable
+
+El desafío es auditar un sitio estático diferente cambiando entradas, sin modificar el código. Se verifican condiciones lingüísticas, editoriales, locales y de medios. No es hoy un sistema de pruebas funcionales de formularios ni de comparación visual de layouts. La plataforma conserva evidencia para que una persona decida.
+
+Fuentes: README.md; platform-template/README.md
+
+================================================================================
+
+04. Entradas y contrato de salida
+
+El perfil se carga en cada auditoría. SITE_URL, LINGUISTIC_ASSET_PATH, REFERENCE_CONTENT_PATH e ISSUE_SCHEMA_PATH definen las entradas. Las referencias se mapean por página. Los archivos montados se tratan como solo lectura. Reglas opcionales ausentes no se inventan; campos desconocidos no crean nuevas comprobaciones automáticamente. Las evidencias se conservan en su idioma original y se solicitan explicaciones en inglés.
+
+Fuentes: src/config.ts; reference-content.ts; docs/ISSUE_SCHEMA.json
+
+================================================================================
+
+05. Stack: simple y explícito
+
+Las versiones mostradas son las declaradas en package.json, no un inventario exacto de dependencias resueltas. El contenedor usa Node 22 slim. El frontend es HTML, CSS y JavaScript nativo; no React. No usamos un framework de agentes ni una base de datos. La integración OpenAI está en el backend; gpt-6-astra es el modelo configurado en la corrida observada, no un requisito fijo.
+
+Fuentes: package.json; Dockerfiles; src/server.ts
+
+================================================================================
+
+06. Arquitectura de extremo a extremo
+
+El navegador llama a Express. POST /api/audits responde 202 y continúa en segundo plano dentro del mismo proceso Node. El coordinador carga entradas y ejecuta el crawler, luego despacha módulos especializados. Cinco tipos de agentes pueden usar el cliente compartido de modelos; Links es determinista. El estado queda en memoria. El dashboard consulta el último estado; no hay cola distribuida ni event bus.
+
+Fuentes: src/server.ts; src/orchestrator/audit.ts; src/agents/
+
+================================================================================
+
+07. Workflow de una auditoría
+
+Run audit inicia la ejecución. El perfil y schema se cargan primero; sin páginas HTML válidas el run falla. El crawler descubre páginas y recursos. El registro de agentes genera tareas por sitio o página. Se validan y deduplican hallazgos; el navegador ve actualizaciones por polling cada segundo. La revisión humana está disponible al terminar. Clear results elimina los resultados del servidor y sus decisiones de revisión.
+
+Fuentes: src/orchestrator/audit.ts; src/dashboard/public/app.js
+
+================================================================================
+
+08. Qué decide el orquestador
+
+El plan es explícito: no hay un modelo que decida libremente qué agente usar. Links corre una vez para todo el sitio y los otros cinco agentes se despachan por página aplicable. Para tres páginas, esto genera 16 workers: 1 + 5×3. Como máximo corren dos simultáneamente. Un fallo no cancela los demás. Se preservan hallazgos deterministas válidos ante fallos del modelo. El cliente de IA tiene 60 segundos de timeout por intento y un reintento para errores transitorios.
+
+Fuentes: src/orchestrator/audit.ts; src/agents/model-check.ts
+
+================================================================================
+
+09. Seis agentes, ocho categorías
+
+Agente y categoría no son lo mismo. Locale/Formatting agrupa dos categorías y Brand/Terminology otras dos. Links es determinista. Language, Brand y Translation usan modelo; Locale y Media mezclan comprobaciones deterministas con modelo. La fuente de cada verificación debe estar configurada o disponible. Cobertura implementada no implica que cada check se ejecute en cada página.
+
+Fuentes: src/agents/; registro en src/orchestrator/audit.ts
+
+================================================================================
+
+10. De una respuesta de IA a un hallazgo revisable
+
+El modelo devuelve estructura, pero no se confía ciegamente en ella. El coordinador valida schema y categorías. Los agentes de texto exigen citas presentes en sus entradas; Translation valida ambas fuentes por separado. La visión no se puede verificar como una subcadena de píxeles y se etiqueta como observación del modelo. La confianza es una estimación de la salida, no precisión calibrada. Verified confirma la existencia del problema, no su corrección.
+
+Fuentes: docs/ISSUE_SCHEMA.json; model-check.ts; translation-quality.ts; media.ts
+
+================================================================================
+
+11. La app: una superficie de revisión
+
+Mostrar primero el flujo visible: Run audit, crawl solo enlaces y Clear results. La barra resume estado, duración y hallazgos; el panel de actividad se abre bajo demanda. Pages distingue páginas exitosas de destinos rotos. Findings permite filtrar y revisar. La identidad visual utiliza cabecera oscura, superficie clara y acentos rojos. Captura de resultados existentes: no es una maqueta.
+
+Fuentes: Captura real del dashboard · localhost:3000
+
+================================================================================
+
+12. Actividad visible sin saturar la página
+
+El panel agrupa estados por agente y muestra los últimos 60 cambios observados en la pestaña. Las marcas horarias son de observación, no un log durable del servidor. Puede perder transiciones muy breves entre polls. Technical details contiene tiempos, intentos, tokens, costos y checks de medios. Los costos son desconocidos si faltan tarifas o uso; no se muestran como cero. La ausencia de imágenes o videos es no aplicable; otros skips y fallos conservan su significado.
+
+Fuentes: activity.js; polling de GET /api/audits/latest
+
+================================================================================
+
+13. Hallazgos que el equipo puede revisar
+
+La tarjeta separa severidad, categoría y estado. La evidencia mantiene las citas originales. Expected y Suggested fix se agrupan, Details contiene confianza y selector. Las acciones guardan estado sin reconstruir la tarjeta ni cerrar los bloques expandidos. Un error de guardado se muestra dentro de la tarjeta. Las decisiones persisten solo en la sesión actual del servidor.
+
+Fuentes: issues-view.js; captura real de Translation Quality
+
+================================================================================
+
+14. Caso real: subtítulos en el idioma equivocado
+
+En About, sección Conoce al equipo, el primer video tiene un track con srclang es y etiqueta Español. La lectura real del WebVTT encontró cues en inglés. El agente reporta el XPath, URL del recurso y texto de evidencia. La corrección propuesta es español. La tarjeta está Verified porque el hallazgo se confirmó, pero no se ha editado el archivo de práctica. Mostrar en la demo activando los subtítulos Español.
+
+Fuentes: about.html:68; video/captions.vtt; hallazgo media-e3c90b8d03179145
+
+================================================================================
+
+15. Resultado observado en el sitio de práctica
+
+Esta corrida completada tiene 22 issues y duró 62,536 segundos. Las categorías suman 1 Links, 1 Language, 4 Locale, 1 Formatting, 3 Terminology, 2 Brand, 4 Translation y 6 Media. Se despacharon 16 workers y 15 completaron; Media/Pricing fue no aplicable. No confundir 4 respuestas HTML con 4 páginas válidas: una era un 404. No hay costo en dólares validado porque las tarifas no estaban configuradas.
+
+Fuentes: GET /api/audits/latest · 15/10/2026 13:57 ART
+
+================================================================================
+
+16. Qué validamos hasta ahora
+
+Se ejecutó la suite actual durante la preparación: 57 entradas TAP aprobadas, incluyendo grupos. Las pruebas usan sitios y APIs simuladas, no llamadas pagas. El typecheck pasó. Las comprobaciones de navegador cubrieron móvil, teclado, actualizaciones, filtros, expansión de evidencia y guardado/error de revisión. El smoke test real demuestra integración. Ninguno de estos reemplaza un benchmark humano de precisión y recall con ground truth.
+
+Fuentes: npm test + typecheck; pruebas de navegador; smoke test real
+
+================================================================================
+
+17. Cómo se ejecuta y configura
+
+En local, el sitio debe estar disponible en el puerto 8080 y el dashboard en 3000. npm run dev carga ../.env. El API key se mantiene en backend. Docker Compose define ambos servicios y montajes de solo lectura, pero todavía falta validación end to end de ese camino. El modelo y las tarifas se configuran por entorno. Ejecutar Run audit envía texto, referencias y medios a OpenAI y consume API.
+
+Fuentes: platform-template/README.md; docker-compose.yml; .env.example
+
+================================================================================
+
+18. Límites actuales: qué no debemos prometer
+
+El servidor conserva solo el último run en memoria; reiniciar borra resultados. Links no cubre externos, locale de destino ni semántica de anclas. El crawler no ejecuta JavaScript ni valida layout. El límite de visitas es 50 y texto de página mayor a 24.000 caracteres falla el paso de modelo sin chunking. Media está limitado al mismo origen y formatos raster admitidos; verifica disponibilidad de video, no audio, frames ni sincronización. La calidad semántica requiere juicio humano.
+
+Fuentes: README: Current limits; crawler; media-resources; server.ts
+
+================================================================================
+
+19. Próximos pasos propuestos
+
+La siguiente tarea registrada es persistencia. Proponemos mantenerla como prioridad: runs, workers, findings y decisiones con timestamps, más pruebas de recuperación. Después validar Docker y la permanencia de datos. Ampliar Links para el catálogo completo. Ensayar con un sitio/perfil desconocido y medir precisión y recall sobre anotaciones humanas. Robustez adicional: chunking y consistencia de explicaciones. No se comprometen fechas ni esfuerzo estimado en esta presentación.
+
+Fuentes: docs/HANDOFF.md: Next Task; README: milestones
+
+================================================================================
+
+20. Guion para la demo y conversación del equipo
+
+Propuesta de demo en cinco minutos: abrir el dashboard con resultados existentes, explicar el resumen, mostrar actividad y su detalle, revisar el hallazgo de subtítulos y ubicarlo en About, luego explicar los estados. Si se ejecuta una auditoría nueva, advertir que consume API y esperar aproximadamente un minuto en este sitio, sin prometer el mismo tiempo. No usar Clear results antes de mostrar los hallazgos. Decisiones: prioridad de persistencia, responsable del ensayo y criterios de calidad.
+
+Fuentes: Aplicación local; funcionalidades implementadas
+
+================================================================================
+
+21. Anexo A · API disponible
+
+Estos endpoints existen hoy. Se permiten una auditoría o crawl activos; solicitudes concurrentes se rechazan con 409. DELETE results también rechaza durante ejecución. La revisión valida los estados admitidos. No hay API de historial durable, exportación de resultados ni cancelación de auditoría.
+
+Fuentes: src/server.ts
+
+================================================================================
+
+22. Anexo B · Mapa del código y fuentes
+
+Los diagramas y las cifras se basan en el código, no solo en documentación histórica. AGENTS y partes del README raíz todavía describen el scaffold original; para el estado actual usar platform-template/README y src. La captura corresponde a una corrida real del 15 de octubre. Los archivos de esta presentación incluyen notas del expositor y capturas para reutilización.
+
+Fuentes: Repositorio 7c89229 · documentación y captura actual

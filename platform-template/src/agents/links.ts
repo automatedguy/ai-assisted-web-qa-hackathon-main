@@ -32,7 +32,7 @@ export function checkBrokenLinks(crawl: CrawlResult): QaIssue[] {
         id: `link-${digest}`,
         category: "links",
         severity: "major",
-        location: { page_url: page.url, element_type: "link" },
+        location: { page_url: page.url, element_type: "link", selector_or_xpath: link.selector },
         description: `The link destination returned HTTP ${status}.`,
         evidence: `${anchorText}${target.toString()} (HTTP ${status})`,
         expected: "The link should lead to an available destination.",

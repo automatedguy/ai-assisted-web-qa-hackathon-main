@@ -34,6 +34,15 @@
         }
       }
     },
+    "visual_evidence": {
+      "type": "object",
+      "required": ["screenshot_url", "highlighted"],
+      "properties": {
+        "screenshot_url": { "type": "string" },
+        "highlighted": { "type": "boolean" },
+        "note": { "type": "string" }
+      }
+    },
     "description": { "type": "string" },
     "evidence": { "type": "string" },
     "expected": { "type": "string" },

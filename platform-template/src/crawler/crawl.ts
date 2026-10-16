@@ -1,6 +1,6 @@
 import * as cheerio from "cheerio";
 
-export type PageLink = { text: string; href: string };
+export type PageLink = { text: string; href: string; selector: string };
 export type PageImage = { src: string; alt: string | null; candidates: string[]; selector: string; context: string; decorative: boolean };
 export type PageTrack = {
   src: string;
@@ -86,13 +86,14 @@ export async function crawlSite(rawStartUrl: string): Promise<CrawlResult> {
 
       const links = $("a[href]")
         .toArray()
-        .map((element) => {
+        .map((element, index) => {
           const anchor = $(element);
           const href = anchor.attr("href")?.trim() ?? "";
           const resolved = pageUrl(href, url);
           return {
             text: anchor.text().replace(/\s+/g, " ").trim(),
             href: resolved ?? href,
+            selector: `(//a[@href])[${index + 1}]`,
           };
         });
 

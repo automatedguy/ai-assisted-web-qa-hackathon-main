@@ -36,6 +36,12 @@ export function createIssuesView(document, onReview) {
     card.expand.addEventListener('click', () => { card.expanded = !card.expanded; updateEvidence(card); });
     evidence.append(element('p', 'issue-label', 'Evidence'), card.quote, card.expand);
 
+    card.visual = element('figure', 'issue-visual');
+    card.visualImage = element('img', 'issue-screenshot');
+    card.visualLink = element('a', 'issue-screenshot-link', 'Open full screenshot ↗');
+    card.visualLink.target = '_blank'; card.visualLink.rel = 'noopener noreferrer';
+    card.visual.append(card.visualImage, card.visualLink);
+
     card.correction = element('div', 'issue-correction');
     const corrections = element('dl', 'issue-correction-fields');
     card.expected = element('div'); card.expectedValue = element('dd');
@@ -72,7 +78,7 @@ export function createIssuesView(document, onReview) {
     }
     footer.append(card.page, actions);
     card.feedback = element('p', 'issue-feedback'); card.feedback.setAttribute('role', 'status');
-    item.append(header, card.heading, evidence, card.correction, card.details, footer, card.feedback);
+    item.append(header, card.heading, evidence, card.visual, card.correction, card.details, footer, card.feedback);
     return card;
   }
 
@@ -104,6 +110,14 @@ export function createIssuesView(document, onReview) {
         setText(card.status, label(issue.status)); card.status.dataset.status = issue.status;
         setText(card.heading, issue.description);
         updateEvidence(card);
+        const visual = issue.visual_evidence;
+        card.visual.hidden = !visual?.screenshot_url;
+        if (visual?.screenshot_url) {
+          card.visualImage.src = visual.screenshot_url;
+          card.visualImage.alt = visual.highlighted ? 'Screenshot with the affected element highlighted in red.' : 'Screenshot of the affected page.';
+          card.visualLink.href = visual.screenshot_url;
+          card.visualLink.title = visual.note || '';
+        }
         card.correction.hidden = !issue.expected && !issue.suggested_fix;
         card.expected.hidden = !issue.expected; card.fix.hidden = !issue.suggested_fix;
         setText(card.expectedValue, issue.expected || ''); setText(card.fixValue, issue.suggested_fix || '');

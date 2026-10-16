@@ -15,6 +15,11 @@ export type QaIssue = {
     selector_or_xpath?: string;
     element_type: "text" | "image" | "video" | "link";
   };
+  visual_evidence?: {
+    screenshot_url: string;
+    highlighted: boolean;
+    note?: string;
+  };
   description: string;
   evidence: string;
   expected?: string;

@@ -10,6 +10,7 @@ import { translationQualityAgent } from "../agents/translation-quality.js";
 import { mediaAgent } from "../agents/media.js";
 import { WorkerFailure } from "../agents/types.js";
 import type { Agent, WorkerRun } from "../agents/types.js";
+import { captureIssueScreenshots } from "../visual-evidence.js";
 
 const agents: Agent[] = [
   { id: "links", categories: ["links"], scope: "site", execute: async ({ crawl }) => checkBrokenLinks(crawl) },
@@ -85,6 +86,10 @@ export async function executeAudit(audit: Audit, siteUrl: string, model: string,
     await Promise.all(Array.from({ length: Math.min(2, tasks.length) }, async () => {
       while (next < tasks.length) { const task = tasks[next++]; await task(); }
     }));
+    if (audit.issues.length) {
+      audit.phase = "Capturing visual evidence";
+      await captureIssueScreenshots(audit.id, audit.issues);
+    }
     audit.status = audit.workers.some(worker => worker.status === "failed") || crawl.errors.length > 0 || crawl.limitReached || audit.coverage.some(item => !item.implemented) ? "partial" : "completed";
     audit.phase = "Finished";
   } catch (error) {

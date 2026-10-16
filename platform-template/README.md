@@ -4,6 +4,8 @@ TypeScript / Express audit platform with a coordinator, OpenAI Language,
 Locale/Formatting, Brand/Terminology, Translation Quality and Media agents, and a
 deterministic Links worker. All eight categories are implemented: spelling/grammar,
 links, formatting, locale rules, brand voice, terminology, translation quality, and media.
+Findings also receive best-effort annotated screenshots: Playwright renders each
+affected page and red markers identify the matching XPath or closest text block.
 
 ## Run locally
 
@@ -23,6 +25,9 @@ The practice site must be running at `SITE_URL` (default http://localhost:8080).
   also rejects requests while an audit or crawl is running.
 - Review findings by category and mark them verified, dismissed, or escalated.
   Review actions become available after the audit finishes.
+- Findings with visual evidence show the annotated screenshot inline; use **Open
+  full screenshot** for the original-size capture. Screenshots are kept in the
+  server's temporary evidence directory for the current process.
 - Finding cards separate severity, category, review status, evidence, and corrections.
   Long evidence expands with **Show more**; **Details** contains confidence and element
   location. Page links open in a new tab. Reviews update the existing card, preserving

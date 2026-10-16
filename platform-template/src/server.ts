@@ -5,6 +5,9 @@ import type { QaIssue } from "./issues.js";
 import { createAudit, executeAudit, type Audit } from "./orchestrator/audit.js";
 import { fileURLToPath } from "node:url";
 import { crawlSite, type CrawlResult } from "./crawler/crawl.js";
+import { mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const app = express();
 const port = Number(process.env.PORT ?? 3000);
@@ -14,9 +17,12 @@ let latestCrawl: CrawlResult | null = null;
 let latestIssues: QaIssue[] = [];
 let latestAudit: Audit | null = null;
 let crawling = false;
+const screenshotDir = process.env.SCREENSHOT_DIR ?? join(tmpdir(), "qa-platform-screenshots");
+mkdirSync(screenshotDir, { recursive: true });
 
 app.use(express.json());
 app.use(express.static(fileURLToPath(new URL("./dashboard/public/", import.meta.url))));
+app.use("/api/screenshots", express.static(screenshotDir, { fallthrough: false, maxAge: "1h" }));
 
 app.get("/api/audits/latest", (_request, response) => response.json(latestAudit));
 app.post("/api/audits", (_request, response) => {

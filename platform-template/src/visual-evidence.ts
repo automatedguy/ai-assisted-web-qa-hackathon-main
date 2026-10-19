@@ -1,13 +1,12 @@
 import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { screenshotDir } from './storage-paths.js';
 import type { QaIssue } from "./issues.js";
 import { replaySteps } from "./crawler/rendered.js";
 
 type Marker = { id: string; selector?: string; evidence: string; label: string };
 
-const screenshotDir = process.env.SCREENSHOT_DIR ?? join(tmpdir(), "qa-platform-screenshots");
 const viewport = { width: 1440, height: 900 };
 
 function markerFor(issue: QaIssue): Marker {

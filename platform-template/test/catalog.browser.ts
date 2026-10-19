@@ -8,7 +8,6 @@ import { checkBrokenLinks } from '../src/agents/links.js';
 import { captureIssueScreenshots } from '../src/visual-evidence.js';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import type { QaIssue } from '../src/issues.js';
 
 // Real practice HTML/JS/assets, isolated server, no model calls or .env.
@@ -57,7 +56,8 @@ try {
   if (process.env.QA_DISABLE_SCREENSHOTS !== '1') {
     assert(dates.every(issue => issue.visual_evidence?.highlighted), 'Rendered evidence must be replayed and highlighted');
     assert(mobileIssue.visual_evidence?.highlighted, 'The mobile resource must be replayed');
-    const png = await readFile(join(process.env.SCREENSHOT_DIR ?? join(tmpdir(),'qa-platform-screenshots'),mobileIssue.visual_evidence.screenshot_url.split('/').pop()!));
+    const { screenshotDir } = await import('../src/storage-paths.js');
+    const png = await readFile(join(screenshotDir,mobileIssue.visual_evidence.screenshot_url.split('/').pop()!));
     assert.equal(png.readUInt32BE(16),390,'Mobile evidence must not use a desktop screenshot');
   }
   console.log(JSON.stringify({ status: 'passed', states: crawl.pages.map(page => ({ url: page.url, states: page.rendered?.states })),

@@ -19,10 +19,33 @@
   <div class="audit-actions" role="group" aria-label="Audit actions">
     <button id="audit" type="button">Run audit</button>
     <button id="crawl" type="button">Crawl and check links only</button>
-    <button id="clear" type="button" disabled title="Clear the current results and review decisions">Clear results</button>
+    <button id="clear" type="button" disabled title="Clear the workspace and future review carry-forward; saved history is retained">Clear workspace</button>
   </div>
   <p class="audit-note">Run audit checks all eight categories. Page text, mapped reference content, images, alt text, and captions are sent to OpenAI for review. API charges apply.</p>
   <p id="message" role="status"></p>
+  <section id="history-panel" aria-labelledby="history-heading">
+    <h2 id="history-heading">Run history</h2>
+    <div class="history-controls">
+      <label>View run<select id="run-history"><option value="">Current workspace (follow latest run)</option></select></label>
+      <button id="history-refresh" type="button">Refresh history</button>
+    </div>
+    <div class="history-pagination"><button id="history-newer" type="button" disabled>Newer</button><span id="history-page">Loading history…</span><button id="history-older" type="button" disabled>Older</button></div>
+    <p id="history-selected" aria-live="polite"></p>
+    <p id="history-error" role="alert"></p>
+    <p><strong id="history-cost">No saved usage yet.</strong></p>
+    <details id="history-spending"><summary>Cumulative estimated spend</summary>
+      <p id="history-cost-note"></p>
+      <h3>By model</h3><ul id="history-cost-models"></ul>
+      <h3>By agent</h3><ul id="history-cost-agents"></ul>
+    </details>
+    <details id="history-comparison"><summary>Compare findings</summary>
+      <label>Baseline<select id="comparison-baseline"><option value="">Previous same-site run (automatic)</option></select></label>
+      <p class="activity-muted">Manual choices come from the history page above. Automatic comparison searches all saved runs.</p>
+      <p id="comparison-summary" aria-live="polite"></p><p id="comparison-warning" class="cost-warning"></p>
+      <div id="comparison-results"></div>
+    </details>
+    <p class="activity-muted">Saved runs and reviews survive restarts. Clearing the workspace keeps history and costs, but resets review carry-forward for future runs of the configured site.</p>
+  </section>
   <section id="activity-bar" class="activity-bar" data-state="idle" aria-label="Audit activity">
     <span class="activity-dot" aria-hidden="true"></span>
     <div class="activity-copy">

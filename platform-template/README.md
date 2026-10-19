@@ -10,6 +10,9 @@ identify the matching selector/XPath or closest text block.
 
 ## Run locally
 
+Use Node **22.18+** (`nvm use` from the repository root selects the pinned version).
+The history store uses [Node's built-in SQLite](https://nodejs.org/download/release/v22.18.0/docs/api/sqlite.html);
+Node 21 is no longer sufficient. Node 22 may print an experimental SQLite warning.
 From `platform-template/`, run `npm install` and `npm run dev`, then open
 http://localhost:3000. The development script loads the repository-root `.env`.
 The practice site must be running at `SITE_URL` (default http://localhost:8080).
@@ -20,15 +23,18 @@ The practice site must be running at `SITE_URL` (default http://localhost:8080).
   model must support image inputs for visual checks.
 - **Crawl and check links only** runs the existing deterministic check without
   model requests.
-- **Clear results** removes the current audit, crawled pages, findings, and review
-  decisions from the server and dashboard. Results stay cleared after a refresh.
-  Clearing is disabled during checks and review updates; `DELETE /api/results`
-  also rejects requests while an audit or crawl is running.
+- **Run history** selects saved audits or link-only checks, including their worker
+  reports, findings and recorded rates. Current workspace follows the latest run.
+- **Clear workspace** clears the current view and resets review carry-forward for
+  future runs of the configured site. Saved runs, their reviews, screenshots and
+  cumulative costs are retained. The empty workspace survives refresh/restart.
+  Clearing is disabled while viewing history, during checks and review updates;
+  `DELETE /api/results` rejects requests while an audit or crawl is running.
 - Review findings by category and mark them verified, dismissed, or escalated.
   Review actions become available after the audit finishes.
 - Findings with visual evidence show the annotated screenshot inline; use **Open
   full screenshot** for the original-size capture. Screenshots are kept in the
-  server's temporary evidence directory for the current process.
+  persistent data directory (or an explicit `SCREENSHOT_DIR`).
 - Finding cards separate severity, category, review status, evidence, and corrections.
   Long evidence expands with **Show more**; **Details** contains confidence and element
   location. Page links open in a new tab. Reviews update the existing card, preserving
@@ -56,7 +62,72 @@ The practice site must be running at `SITE_URL` (default http://localhost:8080).
   model calls. The last 60 observed updates are kept in the current browser tab;
   timestamps indicate when an update was observed. Refreshing rebuilds the view
   from the latest server snapshot, so this is not a durable event history and
-  brief transitions between polls may not appear. Clear results resets the view.
+  brief transitions between polls may not appear. Clear workspace resets the view.
+
+## Persistent history, comparisons and spending
+
+SQLite stores full run snapshots, worker reports, token/rate data, findings and
+timestamped review changes. Reviews target a specific run; editing an older run
+does not rewrite another saved run. Explicit decisions carry forward to future
+runs of the same configured site when the stable finding ID matches, even if a
+finding disappeared in an intermediate run. A later explicit review takes precedence.
+Clear workspace resets this carry-forward without erasing historical decisions.
+Sites are scoped by their normalized configured start URL, not just hostname.
+
+**Compare findings** defaults to the most recent earlier run of the same site and
+check type. Choose a manual baseline from the current history page (Newer/Older
+loads more choices); automatic comparison searches all history. It shows new,
+recurring and **no longer detected** findings, matched by stable ID. Missing findings
+are not confirmed fixes. Partial coverage, changed policy/content/selectors or
+model/evidence-quote variation can change detection and identity. Incomplete runs
+show an explicit warning. Each expanded comparison group displays up to 100
+findings, with full counts; the API returns the complete comparison.
+
+**Cumulative estimated spend** includes every saved site and both check types,
+with model/agent breakdowns. Saved rate cards are used, not calculator overrides
+from the browser tab. Running audits contribute observed usage only. Unknown
+pricing/usage is excluded and marked as a subtotal, never silently treated as free.
+Interrupted runs are also labeled incomplete. Estimates are not invoices and
+retain the cost calculator's exclusions. Connection-test calls are not audit runs
+and are not included in these totals.
+
+Storage defaults to `platform-template/data/history.sqlite` plus `data/screenshots/`,
+independent of the shell's current directory. Set `QA_DATA_DIR` to move both;
+`SCREENSHOT_DIR` can override evidence storage separately. These paths are ignored
+by Git and the Docker build. Docker Compose mounts a named `qa-history` volume at
+`/var/lib/qa-platform`; normal `docker compose down` retains it, while removing
+volumes with `down -v` destroys it. Keep input/reference mounts read-only.
+
+Snapshots are saved at startup/phase transitions, worker completion, at most
+one-second intervals while running, and final completion. SQLite transactions,
+WAL and full synchronous commits protect saved checkpoints. Restart marks unfinished
+runs interrupted, retains captured evidence and flags possibly missing usage;
+it does **not** resume site or paid model requests. A request between checkpoints
+can still be missing from recovered costs. Storage failures are shown in the activity
+panel and retried; run creation fails before network work if its first save fails.
+
+Run only **one server process per data directory**. There is no retention/purge UI,
+authentication, reviewer identity or multi-instance coordination yet. Protect this
+directory like the audited site's content: snapshots contain extracted pages and
+evidence. To back up, stop the server and copy the entire data directory (including
+SQLite sidecar files and screenshots); restore it before restarting. Keep the same
+data directory across deploys. Old in-memory runs lost before this feature cannot
+be reconstructed; there is no automatic import of ad hoc JSON exports.
+
+History API (existing latest-run endpoints remain compatible):
+
+- `GET /api/audits?limit=25&offset=0`: newest-first summaries, total count,
+  current/active IDs and cumulative costs across **all** pages. Limit 1–100.
+- `GET /api/audits/:id`: full saved snapshot, or live current snapshot.
+- `GET /api/audits/:id/comparison?baseline=<id>`: stable-ID comparison; omit
+  baseline for automatic selection. No previous run returns `null`.
+- `PATCH /api/audits/:runId/issues/:id/status`: run-scoped review update.
+- `GET /api/audits/:id/reviews`: timestamped review changes for that run.
+- `DELETE /api/results`: clear workspace/carry-forward only; not history deletion.
+
+Offline regression tests use isolated temporary databases and local fixtures,
+including real server restart/SIGKILL recovery, review isolation, cost aggregation,
+comparison boundaries and retained evidence. No paid audit is needed for these tests.
 
 `npm run typecheck` checks TypeScript. `npm test` runs integration checks with
 an isolated local website and simulated OpenAI API; it does not load `.env`
@@ -375,8 +446,8 @@ across responsive sources. The check type is exposed as `assessment.check`.
 Older media IDs have no content fingerprint and are not automatically matched to
 the new IDs: the first run after this change needs fresh media review decisions.
 This change addresses media identity; text checks still depend on exact evidence
-quotes, so changes in quote boundaries can produce new IDs. Review persistence
-remains in-memory and does not survive a server restart.
+quotes, so changes in quote boundaries can produce new IDs. Saved review decisions
+now survive restarts in SQLite, but cannot match a finding whose ID has changed.
 
 Media fetches are restricted to the page's HTTP(S) origin, including redirects,
 with a 10-second timeout and three redirects. Bounds per page are 40 resource
@@ -398,14 +469,14 @@ a full rendering or conformance validator.
 
 ## Current limits and next milestones
 
-Audit results and review decisions are in memory; restarting clears them.
-Only the latest run is retained. Durable history and review audit trails are
-still pending. Overall runs are labeled **partial** while any category is
+Run snapshots and review changes are persisted in SQLite. The activity timeline
+remains tab-local, and reviewer identities/authentication are not implemented.
+Overall runs are labeled **partial** while any category is
 unimplemented, a worker fails, or crawl/browser coverage is incomplete. **Completed** means
 the run finished without those failures; inspect worker skips and media limitations
 to understand what was actually checked. Findings themselves do not make a run partial.
 
-Next milestones are durable run/review history, Docker validation and an unseen-input
+Next milestones are Docker volume validation, retention controls and an unseen-input
 rehearsal. External links and dedicated destination-language checks remain pending.
 Page agents skip non-success responses,
 and pages over 24,000 characters fail their model step visibly until chunking

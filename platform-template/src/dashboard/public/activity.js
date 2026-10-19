@@ -68,7 +68,7 @@ export function activitySummary(run) {
   const state = running ? 'running' : run.status === 'completed' ? 'complete' : run.status === 'failed' ? 'failed' : 'finished with incomplete checks';
   return {
     status: `${title} ${state} · ${running ? `${count(active, 'check')} active · ` : ''}${count(run.issues.length, 'finding')}`,
-    detail: run.error || (running ? run.phase : linksOnly ? 'Checked fetched destinations within this site.' : 'Review the findings below.'),
+    detail: run.persistenceError || run.error || (running ? run.phase : linksOnly ? 'Checked fetched destinations within this site.' : 'Review the findings below.'),
     attention: warnings.join(' · '), coverage,
     note: notApplicable.length ? `${count(notApplicable.length, 'check')} not applicable` +
       (notApplicable.length === 1 ? ` · ${pageOf(notApplicable[0])}: no images or videos.` : ' · No images or videos on these pages. See activity for details.') : '',
@@ -169,6 +169,7 @@ export function createActivityView(document, onViewFindings = () => {}) {
       setText('#panel-metrics', run ? `${count(loadedPages, 'page')} loaded · ${completed}/${workers.length} checks completed · ${seconds(duration)}` : '');
       setText('#panel-phase', run?.status === 'running' ? run.phase : run?.targetLocale ? 'Target locale: ' + run.targetLocale : '');
       const attention = workers.filter(needsAttention).map(w => workerActivity(w));
+      if (run?.persistenceError) attention.unshift(run.persistenceError);
       if (run?.error) attention.unshift(run.error);
       if (run?.crawl?.errors.length) attention.push(...run.crawl.errors.map(error => 'Crawl: ' + error.url + ' · ' + error.message));
       if (run?.crawl?.limitReached) attention.push('Crawl limit reached. Some pages were not checked.');

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
 import { agentCatalog } from '../src/dashboard/public/activity-cards.js';
+import { runCost } from '../src/dashboard/public/costs.js';
 
 // Serve only fixture data and repository assets. No live server, credentials or model calls.
 const assets = new URL('../src/dashboard/public/', import.meta.url);
@@ -18,7 +19,7 @@ const issue = {
   assessment: { method: 'model_text', rule: { id: 'measurement_units', value: 'metric' } },
 };
 const makeRun = () => ({
-  id: 'activity-fixture', status: 'running', phase: 'Running workers', targetLocale: 'fr-FR',
+  id: 'activity-fixture', kind: 'audit', siteUrl: 'https://example.test/', status: 'running', phase: 'Running workers', targetLocale: 'fr-FR',
   startedAt: new Date(Date.now() - 2000).toISOString(), durationMs: 0, issues: [structuredClone(issue)],
   crawl: { pages: [{ url: 'https://example.test/', title: 'Example', status: 200, links: [] }], responses: [], errors: [], limitReached: false },
   workers: agentCatalog.map(agent => ({
@@ -37,14 +38,33 @@ try {
     const page = await browser.newPage({ viewport, reducedMotion: 'reduce' });
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     let run = makeRun(); let snapshots = 0;
+    const archived = { ...makeRun(), id: 'archived-fixture', status: 'completed', startedAt: '2026-10-01T12:00:00.000Z',
+      issues: [{ ...structuredClone(issue), id: 'old-only', description: 'Earlier finding <script>window.injected = true</script>' }] };
+    archived.workers.forEach(worker => { worker.status = 'completed'; });
+    let clearedRun;
+    const summary = item => ({ ...item, issueCount: item.issues.length, cost: runCost(item) });
     await page.route('**/*', async route => {
       const url = new URL(route.request().url());
       if (url.origin !== 'http://qa.test') return route.fulfill({ status: 204, body: '' });
       if (url.pathname.startsWith('/api/')) {
         let data;
         if (url.pathname === '/api/health') data = { apiKeyConfigured: false, model: 'fixture-model' };
+        else if (url.pathname === '/api/audits') {
+          const saved = [run || clearedRun, archived].filter(Boolean);
+          const usd = saved.reduce((sum, item) => sum + (runCost(item).usd || 0), 0);
+          data = { runs: saved.map(summary), total: saved.length, currentRunId: run?.id, activeRunId: run?.status === 'running' ? run.id : null,
+            spending: { total: { usd, runs: saved.length, partial: false }, models: {}, agents: {}, activeRuns: run?.status === 'running' ? 1 : 0 } };
+        }
+        else if (url.pathname.endsWith('/comparison')) data = url.pathname.includes(archived.id) ? null : {
+          baseline: summary(archived), current: summary(run), new: run.issues, recurring: [], noLongerDetected: archived.issues,
+          warning: 'Coverage may be incomplete. No longer detected does not prove a fix.',
+        };
+        else if (url.pathname === `/api/audits/${archived.id}`) data = archived;
+        else if (url.pathname === `/api/audits/${archived.id}/issues/old-only/status`) {
+          archived.issues[0].status = route.request().postDataJSON().status; data = archived.issues[0];
+        }
         else if (url.pathname === '/api/audits/latest') { data = run; snapshots++; }
-        else if (url.pathname === '/api/results' && route.request().method() === 'DELETE') { run = null; data = { cleared: true }; }
+        else if (url.pathname === '/api/results' && route.request().method() === 'DELETE') { clearedRun = run; run = null; data = { cleared: true }; }
         else throw new Error('Unexpected API request: ' + url.pathname);
         return route.fulfill({ json: data });
       }
@@ -54,6 +74,15 @@ try {
       return route.fulfill({ body, contentType: file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : file.endsWith('.png') ? 'image/png' : 'text/html' });
     });
     await page.goto('http://qa.test/');
+    // A historical selection must stay selected while a different run is active.
+    await page.waitForFunction(() => document.querySelector('#run-history').options.length === 3);
+    await page.locator('#run-history').selectOption(archived.id);
+    await page.waitForFunction(() => document.querySelector('#history-selected').textContent.includes('archived'));
+    assert.equal(await page.locator('#audit').isDisabled(), true);
+    await page.waitForTimeout(1200);
+    assert.equal(await page.locator('#run-history').inputValue(), archived.id);
+    await page.locator('#run-history').selectOption('');
+    await page.waitForFunction(() => document.querySelector('#activity-status').textContent.includes('running'));
     await page.locator('#view-activity').click();
     await page.waitForFunction(() => document.querySelectorAll('.agent-card').length === 8);
     const locale = page.locator('.agent-card').filter({ has: page.locator('strong', { hasText: /^Locale$/ }) });
@@ -156,7 +185,33 @@ try {
     await page.locator('#cost-rates button[type="submit"]').click();
     assert.match(await page.locator('#panel-cost').innerText(), /\$0\.00000 estimated/);
     await page.keyboard.press('Escape');
+    // History is independent of calculator overrides and reviews target the selected run.
+    assert.match(await page.locator('#history-cost').innerText(), /2 saved runs/);
+    await page.locator('#history-comparison > summary').click();
+    await page.waitForFunction(() => document.querySelector('#comparison-summary').textContent.includes('1 new'));
+    assert.match(await page.locator('#comparison-summary').innerText(), /1 no longer detected/);
+    assert.match(await page.locator('#comparison-warning').innerText(), /does not prove a fix/);
+    await page.locator('#run-history').selectOption(archived.id);
+    await page.waitForFunction(() => document.querySelector('#history-selected').textContent.includes('archived'));
+    assert.equal(await page.locator('#clear').isDisabled(), true);
+    await page.locator('.category-card[data-category="locale_rules"]').click();
+    assert.match(await page.locator('#issues').innerText(), /Earlier finding/);
+    await page.locator('#issues').getByRole('button', { name: 'Verify', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('#issues .issue-status').textContent === 'Verified');
+    assert.equal(archived.issues[0].status, 'verified');
+    assert.equal(run.issues[0].status, 'new');
+    assert.equal(await page.evaluate(() => window.injected), undefined);
+    assert.match(await page.locator('#comparison-summary').innerText(), /No earlier run/);
+    await page.locator('#run-history').selectOption('');
+    await page.waitForFunction(() => document.querySelector('#history-selected').textContent.includes('current workspace:'));
+    assert.equal(await page.locator('#clear').isDisabled(), false);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await page.locator('#history-panel').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: join(screenshotDirectory, `${viewport.width}-history.png`) });
     await page.locator('#clear').click();
+    await page.waitForFunction(() => document.querySelector('#activity-status').textContent === 'Ready to check your site');
+    assert.match(await page.locator('#history-cost').innerText(), /2 saved runs/);
+    assert.equal(await page.locator('#comparison-results details').count(), 0);
     await page.locator('#view-activity').click();
     await page.waitForFunction(() => document.querySelector('#panel-status').textContent === 'Ready to check your site');
     assert.equal(await page.locator('.agent-finding').count(), 0);
@@ -165,6 +220,6 @@ try {
     assert.deepEqual(errors, []);
     await page.close();
   }
-  console.log('Activity panel checks passed: desktop/mobile, cost calculator, polling, evidence, filters, focus and reset.');
+  console.log('Activity panel checks passed: desktop/mobile, saved-run selection, comparisons, review isolation, costs, polling, evidence, filters, focus and reset.');
   console.log('Screenshots:', screenshotDirectory);
 } finally { await browser.close(); }

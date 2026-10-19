@@ -29,6 +29,7 @@ const agents: Agent[] = [
 ];
 export type Audit = {
   id: string; status: "running" | "completed" | "partial" | "failed";
+  kind?: 'audit' | 'crawl'; siteUrl?: string; model?: string; persistenceError?: string; interrupted?: boolean;
   phase: string; startedAt: string; finishedAt?: string; durationMs: number;
   targetLocale?: string; crawl?: CrawlResult; workers: WorkerRun[]; issues: QaIssue[];
   coverage: Array<{ category: QaIssue["category"]; implemented: boolean }>;
@@ -43,18 +44,21 @@ export function createAudit(): Audit {
     workers: [], issues: [], coverage: categories.map(category => ({ category, implemented: agents.some(agent => agent.categories.includes(category)) })),
   };
 }
-export async function executeAudit(audit: Audit, siteUrl: string, model: string, previous: QaIssue[]) {
+export async function executeAudit(audit: Audit, siteUrl: string, model: string, previous: QaIssue[], checkpoint = () => {}) {
   const started = Date.now();
+  audit.siteUrl = siteUrl; audit.model = model;
   audit.pricing = configuredPricing(model);
   try {
     const profile = await loadProfile();
     const validateIssue = await loadIssueValidator();
     audit.targetLocale = profile.locale.target_locale;
     audit.phase = "Crawling site";
+    checkpoint();
     const crawl = audit.crawl = await crawlSite(siteUrl);
     const pages = crawl.pages.filter(page => page.status >= 200 && page.status < 300);
     if (!pages.length) throw new Error("No successful HTML pages were available to audit.");
     audit.phase = "Exploring browser states";
+    checkpoint();
     await collectRenderedPages(pages);
     audit.browserCoverage = pages.map(page => ({ pageUrl: page.url, status: page.rendered!.status, states: page.rendered!.states, limitations: page.rendered!.limitations }));
     audit.phase = "Running workers";
@@ -107,10 +111,12 @@ export async function executeAudit(audit: Audit, siteUrl: string, model: string,
         } finally {
           report.finishedAt = new Date().toISOString();
           report.durationMs = Date.now() - workerStart;
+          checkpoint();
           console.log(JSON.stringify({ event: "worker_finished", auditId: audit.id, ...report }));
         }
       };
     }));
+    checkpoint();
     // Two independent workers at a time; a failed worker never cancels siblings.
     let next = 0;
     await Promise.all(Array.from({ length: Math.min(2, tasks.length) }, async () => {
@@ -131,5 +137,6 @@ export async function executeAudit(audit: Audit, siteUrl: string, model: string,
   } finally {
     audit.finishedAt = new Date().toISOString(); audit.durationMs = Date.now() - started;
     audit.cost = runCost(audit);
+    checkpoint();
   }
 }

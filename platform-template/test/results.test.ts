@@ -33,7 +33,7 @@ test('clear results resets server state and refuses active checks', { timeout: 2
   await new Promise<void>(resolve => reservation.close(() => resolve()));
   const child = spawn(process.execPath, ['--import', 'tsx', 'src/server.ts'], {
     env: { ...process.env, PORT: String(port), SITE_URL: `http://127.0.0.1:${sitePort}`,
-      LINGUISTIC_ASSET_PATH: profile, OPENAI_API_KEY: '' },
+      LINGUISTIC_ASSET_PATH: profile, OPENAI_API_KEY: '', QA_DATA_DIR: join(directory, 'history') },
     stdio: 'ignore',
   });
   const exited = once(child, 'exit');

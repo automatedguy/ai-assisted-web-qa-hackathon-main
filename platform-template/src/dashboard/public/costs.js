@@ -63,7 +63,7 @@ export function runCost(run, overrides = {}) {
   const usd = known.reduce((sum, estimate) => sum + estimate.usd, 0);
   return {
     usd: known.length && Number.isFinite(usd) ? usd : null,
-    partial: estimates.some(estimate => estimate.partial) || !Number.isFinite(usd),
+    partial: Boolean(run?.interrupted) || estimates.some(estimate => estimate.partial) || !Number.isFinite(usd),
     cacheApproximate: estimates.some(estimate => estimate.cacheApproximate),
     unpriced: estimates.filter(estimate => estimate.usd === null).length,
     input: workers.reduce((sum, worker) => sum + (tokens(worker.inputTokens) ? worker.inputTokens : 0), 0),

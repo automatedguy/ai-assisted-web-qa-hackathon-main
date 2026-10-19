@@ -17,6 +17,7 @@ services:
       LINGUISTIC_ASSET_PATH: /data/linguistic-assets/practice-profile.yaml
       ISSUE_SCHEMA_PATH: /data/docs/ISSUE_SCHEMA.json
       REFERENCE_CONTENT_PATH: /data/reference-content
+      QA_DATA_DIR: /var/lib/qa-platform
       OPENAI_INPUT_USD_PER_MILLION: ${OPENAI_INPUT_USD_PER_MILLION:-}
       OPENAI_OUTPUT_USD_PER_MILLION: ${OPENAI_OUTPUT_USD_PER_MILLION:-}
       OPENAI_CACHED_INPUT_USD_PER_MILLION: ${OPENAI_CACHED_INPUT_USD_PER_MILLION:-}
@@ -24,6 +25,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-6-astra}
     volumes:
+      - qa-history:/var/lib/qa-platform
       - ./linguistic-assets:/data/linguistic-assets:ro
       - ./reference-content:/data/reference-content:ro
       - ./docs:/data/docs:ro
@@ -31,3 +33,6 @@ services:
 
 networks:
   qa-net: {}
+
+volumes:
+  qa-history: {}

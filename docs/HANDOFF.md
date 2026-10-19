@@ -5,7 +5,7 @@ bounded browser-state checks, semantic links and catalog regression tooling.
 
 ## Catalog implementation validation (2026-10-19)
 
-- TypeScript checks and all 93 offline tests pass, including media identity,
+- TypeScript checks and all 99 offline tests pass, including SQLite restart/recovery, media identity,
   grouped-currency reconciliation and cost-estimation regressions.
 - `npm run test:catalog-browser` captured 37 desktop/mobile states across the three
   practice pages and verified generated singular/empty copy, all three mobile-menu
@@ -30,7 +30,7 @@ verify that reworded evidence and reordered responses preserve review statuses,
 while changed content requires review. Multiple observations for the same
 asset/check are retained together; different checks remain separate. Legacy media
 IDs need one fresh review because they lack content fingerprints. Other agents'
-exact-quote identity and in-memory-only review persistence are unchanged. The live
+exact-quote identity remains unchanged; durable review persistence was added below. The live
 catalog runs above predate this identity change; no additional paid audit was run.
 
 Currency reconciliation follow-up: exact page/element spans and row context now
@@ -101,7 +101,8 @@ resource/metadata checks with model-based caption, alt text and image inspection
 | Links | `src/agents/links.ts`: HTTP/fragment checks and validated anchor/destination semantic review |
 | Browser evidence | `src/crawler/rendered.ts`: bounded desktop/mobile state capture; `src/agents/rendered-checks.ts`: existing category agents review captured copy and dates |
 | Issue contract | `docs/ISSUE_SCHEMA.json`, with TypeScript types in `src/issues.ts` |
-| Dashboard | `src/dashboard/public/`: compact activity bar, optional activity panel, category filtering, review actions and Clear results |
+| Dashboard | `src/dashboard/public/`: activity panel, category review, saved-run selector, comparisons and cumulative estimates |
+| History | `src/run-store.ts`, `src/history.ts`: SQLite snapshots, review events, recovery, comparisons and spending summaries |
 
 Paths beginning with `src/` above are relative to `platform-template/`.
 
@@ -109,8 +110,29 @@ Paths beginning with `src/` above are relative to `platform-template/`.
 `GET /api/audits/latest`; concurrent audit/crawl requests get 409.
 `POST /api/crawl` remains a model-free crawl/link-check operation.
 `GET /api/issues` and `PATCH /api/issues/:id/status` support review.
-`DELETE /api/results` clears the current run, crawl, findings and review decisions;
-it rejects requests while an audit or crawl is running.
+`DELETE /api/results` clears the workspace and future review carry-forward, retaining
+saved runs, review events, screenshots and cost history. It rejects active runs.
+`GET /api/audits` lists paginated summaries and all-history cost totals;
+`GET /api/audits/:id` restores any run. The dashboard reviews via
+`PATCH /api/audits/:runId/issues/:id/status`, so historical edits cannot mutate the
+latest run. `GET /api/audits/:id/reviews` exposes timestamped changes;
+`GET /api/audits/:id/comparison` compares against the previous same-site/check-type
+run, or a supplied `baseline` ID. Missing findings are not claimed to be fixed.
+
+History requires Node 22.18+ (`nvm use`; root `.nvmrc`) and uses built-in SQLite,
+with no native npm dependency. Default storage is `platform-template/data/`;
+`QA_DATA_DIR` overrides it. Screenshots default to that directory's `screenshots/`
+subdirectory. Compose adds a persistent `qa-history` volume; end-to-end Docker
+volume validation remains pending. Use one server per data directory. Stop the
+server before backing up/copying the whole directory. Never delete the volume to
+clear the UI. Node 22 can emit the built-in SQLite experimental warning.
+
+Checkpoints run during phases, worker completion, every second while active and
+at completion. Interrupted runs recover as partial without resuming paid requests;
+costs warn that requests since the last checkpoint may be missing. Explicit reviews
+carry forward by site/stable ID across restarts and intervening absent findings.
+The saved snapshots preserve recorded prices; browser calculator overrides never
+rewrite cumulative history. Tests use temporary storage and no paid model calls.
 
 The activity panel has a fixed summary, prominent attention section and eight
 expandable agent cards with page outcomes, configured policy rules, limitations
@@ -280,8 +302,9 @@ ChatGPT account does not change the application's `.env` API credential.
 
 ## Known Limitations
 
-- Runs and review state are in memory; only the latest run is retained. No durable
-  audit trail exists. Matching findings preserve statuses only within that session.
+- History is single-process SQLite, without retention controls, authentication or
+  reviewer identities. Snapshot/review history is durable; the observed activity
+  timeline remains tab-local. Pre-feature in-memory runs cannot be reconstructed.
 - Audits deliberately show `partial` while categories are missing, workers fail,
   or crawl coverage is incomplete.
 - Links does not assess external links or run a dedicated destination-language check.
@@ -307,11 +330,11 @@ ChatGPT account does not change the application's `.env` API credential.
   Semantic absence, acceptable paraphrasing and duplicate ownership require model
   judgment and human review; exact quote validation does not establish accuracy.
 
-## Next Task: Durable Runs and Review History
+## Next Task: Persistence Deployment Validation
 
-1. Persist audits, worker reports, findings and review decisions across restarts.
-2. Record review status changes with timestamps and expose past runs in the dashboard.
-3. Test restart recovery and run isolation, then validate Docker Compose end to end.
+1. Validate Compose end to end, including container replacement with retained history/evidence.
+2. Add explicit retention/export controls and an operational backup procedure.
+3. Add reviewer identity/authentication if the dashboard will be shared beyond the demo.
 
 Following milestones: broader link/state coverage and a full unseen-input demo rehearsal.
 

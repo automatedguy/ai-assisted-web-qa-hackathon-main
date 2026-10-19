@@ -8,5 +8,5 @@ export function parseRate(value: unknown): number | null;
 export function validPricing(pricing: unknown): boolean;
 export function workerCost(worker: CostUsage, pricing?: Pricing | null): Estimate;
 export function workerPricing(worker: CostUsage, runPricing?: Pricing | null, overrides?: Record<string, Pricing>): Pricing | null;
-export function runCost(run?: { workers: CostUsage[]; pricing?: Pricing | null } | null, overrides?: Record<string, Pricing>): Estimate & { unpriced: number; input: number; output: number };
+export function runCost(run?: { workers: CostUsage[]; pricing?: Pricing | null; interrupted?: boolean } | null, overrides?: Record<string, Pricing>): Estimate & { unpriced: number; input: number; output: number };
 export function costLabel(estimate: Estimate): string;

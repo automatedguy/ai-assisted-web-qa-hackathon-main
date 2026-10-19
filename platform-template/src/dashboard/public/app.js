@@ -1,5 +1,6 @@
 import { createActivityView, categoryNames } from './activity.js';
 import { createIssuesView } from './issues-view.js';
+import { createHistoryView } from './history-view.js';
 const $ = selector => document.querySelector(selector);
 const auditButton = $('#audit');
 const crawlButton = $('#crawl');
@@ -16,10 +17,21 @@ let reviewBusy = false;
 let viewVersion = 0;
 let pageTitles = new Map();
 let selectedCategory = 'all';
+let selectedRunId = null;
+let displayedRun = null;
+let serverActive = false;
+let operationBusy = false;
+let selectionLoading = false;
+const history = createHistoryView(document, api, id => {
+  selectedRunId = id; viewVersion++; clearTimeout(pollTimer);
+  selectionLoading = true; busy(auditActive); renderIssues();
+  selectedCategory = 'all'; void pollAudit();
+});
 const issuesView = createIssuesView(document, async (issue, status) => {
   reviewBusy = true; busy(auditActive); renderIssues();
   try {
-    const updated = await api('/api/issues/' + encodeURIComponent(issue.id) + '/status', {
+    const path = displayedRun ? `/api/audits/${encodeURIComponent(displayedRun.id)}/issues/` : '/api/issues/';
+    const updated = await api(path + encodeURIComponent(issue.id) + '/status', {
       method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ status }),
     });
     const current = issues.find(item => item.id === issue.id);
@@ -36,9 +48,13 @@ async function api(url, options) {
 }
 function busy(value) {
   auditActive = value;
-  for (const button of [auditButton, crawlButton, clearButton]) button.disabled = value || reviewBusy;
+  for (const button of [auditButton, crawlButton, clearButton]) button.disabled = value || reviewBusy || selectionLoading;
+  // Clearing always targets the current workspace, never an archived run.
+  clearButton.disabled ||= Boolean(selectedRunId);
+  history.setBusy(reviewBusy || operationBusy || selectionLoading);
 }
 function renderEmpty() {
+  displayedRun = null; history.render(null, selectedRunId);
   issues = [];
   selectedCategory = 'all';
   crawlRun = undefined; activity.render(null);
@@ -131,10 +147,12 @@ function renderCrawl(crawl, durationMs) {
 function renderIssues() {
   $('#findings-detail').hidden = selectedCategory === 'all' || issues.length === 0;
   $('#issues-heading').textContent = selectedCategory === 'all' ? 'All findings' : `${categoryNames[selectedCategory] || selectedCategory} findings`;
-  issuesView.render(issues, { category: selectedCategory, disabled: auditActive || reviewBusy, pageTitles });
+  issuesView.render(issues, { category: selectedCategory, disabled: auditActive || reviewBusy || selectionLoading, pageTitles });
 }
 function renderAudit(audit) {
-  busy(audit.status === 'running');
+  displayedRun = audit;
+  busy(serverActive || audit.status === 'running');
+  history.render(audit, selectedRunId);
   activity.render(audit);
   renderPages(audit.crawl); issues = audit.issues; renderCategoryCards(); renderIssues();
 }
@@ -143,9 +161,12 @@ async function pollAudit() {
   clearTimeout(pollTimer);
   const version = viewVersion;
   try {
-    const audit = await api('/api/audits/latest');
+    const data = await history.refresh();
     if (version !== viewVersion) return;
-    if (audit) { renderAudit(audit); if (audit.status === 'running') pollTimer = setTimeout(pollAudit, 1000); }
+    if (data) serverActive = Boolean(data.activeRunId);
+    const audit = await api(selectedRunId ? '/api/audits/' + encodeURIComponent(selectedRunId) : '/api/audits/latest');
+    if (version !== viewVersion) return;
+    if (audit) { renderAudit(audit); if (serverActive || audit.status === 'running') pollTimer = setTimeout(pollAudit, 1000); }
     else {
       const loadedIssues = await api('/api/issues');
       const crawl = await api('/api/pages');
@@ -158,17 +179,22 @@ async function pollAudit() {
     if (version !== viewVersion) return;
     $('#message').textContent = 'Could not refresh audit: ' + error.message;
     if (auditActive) pollTimer = setTimeout(pollAudit, 3000);
+  } finally {
+    if (version === viewVersion) { selectionLoading = false; busy(auditActive); renderIssues(); }
   }
 }
 auditButton.addEventListener('click', async () => {
   viewVersion++; clearTimeout(pollTimer);
+  operationBusy = true; selectedRunId = null;
   busy(true); renderIssues(); $('#message').textContent = '';
   try { renderAudit(await api('/api/audits', { method: 'POST' })); await pollAudit(); }
   catch (error) { $('#message').textContent = error.message; busy(false); await pollAudit(); }
+  finally { operationBusy = false; busy(auditActive); }
 });
 crawlButton.addEventListener('click', async () => {
   viewVersion++;
   clearTimeout(pollTimer);
+  operationBusy = true; selectedRunId = null;
   const started = performance.now();
   busy(true); $('#message').textContent = 'Crawling pages and checking links…';
   crawlButton.textContent = 'Checking links…';
@@ -185,27 +211,30 @@ crawlButton.addEventListener('click', async () => {
   renderIssues();
   try {
     const crawl = await api('/api/crawl', { method: 'POST' }); issues = crawl.issues;
-    renderCrawl(crawl, performance.now() - started);
+    await pollAudit();
     $('#message').textContent = `Link check finished: ${issues.length} ${issues.length === 1 ? 'finding' : 'findings'}. See Findings below.`;
   } catch (error) {
     crawlRun.status = 'failed'; crawlRun.error = error.message; crawlRun.durationMs = performance.now() - started;
     crawlRun.workers[0].status = 'failed'; crawlRun.workers[0].message = error.message;
     activity.render(crawlRun);
     $('#message').textContent = error.message;
-  } finally { crawlButton.textContent = 'Crawl and check links only'; busy(false); renderIssues(); }
+  } finally { operationBusy = false; crawlButton.textContent = 'Crawl and check links only'; busy(false); renderIssues(); await pollAudit(); }
 });
 clearButton.addEventListener('click', async () => {
   viewVersion++; clearTimeout(pollTimer);
+  operationBusy = true;
   busy(true); renderIssues(); clearButton.textContent = 'Clearing…';
   $('#message').textContent = '';
   try {
-    await api('/api/results', { method: 'DELETE' });
+    const result = await api('/api/results', { method: 'DELETE' });
+    selectedRunId = null; serverActive = false;
     busy(false); renderEmpty();
-    $('#message').textContent = 'Results and review decisions cleared.';
+    $('#message').textContent = result.message || 'Workspace cleared. Saved history retained.';
+    await history.refresh();
   } catch (error) {
     $('#message').textContent = 'Could not clear results: ' + error.message;
     busy(false); await pollAudit();
-  } finally { clearButton.textContent = 'Clear results'; renderIssues(); }
+  } finally { operationBusy = false; clearButton.textContent = 'Clear workspace'; busy(auditActive); renderIssues(); }
 });
 $('#back-to-categories').addEventListener('click', () => {
   selectedCategory = 'all'; renderCategoryCards(); renderIssues();

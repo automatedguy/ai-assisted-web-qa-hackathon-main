@@ -10,6 +10,7 @@ import { databasePath, screenshotDir } from './storage-paths.js';
 import { RunStore } from './run-store.js';
 import { compareRuns } from './history.js';
 import { runCost } from './dashboard/public/costs.js';
+import { exportResults } from './results-export.js';
 
 const app = express();
 const port = Number(process.env.PORT ?? 3000);
@@ -62,6 +63,25 @@ app.get('/api/audits/:id', (request, response) => {
   const run = latestAudit?.id === request.params.id ? latestAudit : store.get(request.params.id);
   if (!run) { response.status(404).json({ error: 'Run not found.' }); return; }
   response.json(run);
+});
+app.get('/api/audits/:id/export', async (request, response) => {
+  response.set('Cache-Control', 'no-store');
+  const format = request.query.format ?? 'html';
+  if (format !== 'html' && format !== 'csv') {
+    response.status(400).json({ error: 'Export format must be html or csv.' }); return;
+  }
+  const run = latestAudit?.id === request.params.id ? latestAudit : store.get(request.params.id);
+  if (!run) { response.status(404).json({ error: 'Run not found.' }); return; }
+  if (run.status === 'running') {
+    response.status(409).json({ error: 'Wait for this run to finish before exporting results.' }); return;
+  }
+  if (run.persistenceError) { response.status(503).json({ error: run.persistenceError }); return; }
+  // Freeze statuses before asynchronous image reads so the report is one coherent snapshot.
+  const file = await exportResults(structuredClone(run), format, store.reviews(run.id), screenshotDir);
+  response.set('Content-Type', file.contentType);
+  response.set('Content-Disposition', `attachment; filename="${file.filename}"`);
+  response.set('X-Content-Type-Options', 'nosniff');
+  response.send(file.body);
 });
 app.get('/api/audits/:id/comparison', (request, response) => {
   const run = latestAudit?.id === request.params.id ? latestAudit : store.get(request.params.id);

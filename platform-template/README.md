@@ -25,6 +25,30 @@ The practice site must be running at `SITE_URL` (default http://localhost:8080).
   model requests.
 - **Run history** selects saved audits or link-only checks, including their worker
   reports, findings and recorded rates. Current workspace follows the latest run.
+- **Export Results** in Run history downloads the run currently displayed, including
+  saved runs selected from history. HTML is the default: a standalone report with a
+  summary, findings grouped by category, evidence, suggested fixes, review statuses,
+  coverage, worker diagnostics, usage/costs and review history. Available screenshots
+  are embedded in the HTML file, so it opens offline and can be shared without the
+  platform running. Use the browser's Print command to print or save a PDF. Choose CSV
+  for one row per finding with evidence, suggested fixes, location and review status.
+  Exports include all findings regardless of the category currently open. Completed,
+  partial and failed runs can be exported, including runs with no findings. Wait for
+  an active run or review save to finish; an older run remains exportable while a
+  different audit is running. Saved runs remain exportable after clearing the
+  workspace: select them again in Run history.
+  Missing or uncaptured screenshots are explicitly identified. Export does not
+  recapture the site: it preserves the images saved for that run. Only PNGs inside
+  the configured screenshot directory are embedded; no remote images are fetched.
+  Report text is escaped and active content is disabled. CSV uses UTF-8
+  with a BOM for Excel and protects formula-like text with a leading apostrophe;
+  HTML displays the original strings. CSV includes screenshot paths, not images.
+  Exports use recorded/default rates, not the calculator's temporary overrides.
+  Reports are for reading and sharing, not importing or restoring the database.
+  API: `GET /api/audits/:id/export?format=html` (default) or `format=csv` returns an
+  attachment. Unsupported formats return 400, unknown runs 404, active runs 409,
+  and runs with an unsaved persistence error 503. Exporting does not run checks or
+  make model calls.
 - **Clear workspace** clears the current view and resets review carry-forward for
   future runs of the configured site. Saved runs, their reviews, screenshots and
   cumulative costs are retained. The empty workspace survives refresh/restart.
@@ -136,6 +160,9 @@ desktop and mobile using mocked API data, including polling stability, evidence,
 filters, keyboard focus and reset. Install a Playwright Chromium browser first,
 or set `QA_BROWSER_PATH` to a local Chrome executable. It prints the directory of
 its temporary screenshots and does not touch a running audit.
+`npm run test:report-ui` verifies standalone HTML reports with embedded images
+offline, on desktop and mobile, including missing-image notices and print styles.
+Set `QA_BROWSER_PATH` to your Chrome executable if needed.
 `docker compose up --build` from the repository root starts
 both services; free ports 8080 and 3000 first if already running separately.
 

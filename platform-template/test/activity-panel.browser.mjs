@@ -38,6 +38,9 @@ try {
     const page = await browser.newPage({ viewport, reducedMotion: 'reduce' });
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     let run = makeRun(); let snapshots = 0;
+    let failExport = false;
+    let failRunLoad = false;
+    const exportRequests = [];
     const archived = { ...makeRun(), id: 'archived-fixture', status: 'completed', startedAt: '2026-10-01T12:00:00.000Z',
       issues: [{ ...structuredClone(issue), id: 'old-only', description: 'Earlier finding <script>window.injected = true</script>' }] };
     archived.workers.forEach(worker => { worker.status = 'completed'; });
@@ -49,6 +52,16 @@ try {
       if (url.pathname.startsWith('/api/')) {
         let data;
         if (url.pathname === '/api/health') data = { apiKeyConfigured: false, model: 'fixture-model' };
+        else if (url.pathname.endsWith('/export')) {
+          const selected = url.pathname === `/api/audits/${archived.id}/export` ? archived : run;
+          const format = url.searchParams.get('format');
+          exportRequests.push({ id: selected?.id, format });
+          if (failExport) { failExport = false; return route.fulfill({ status: 503, json: { error: 'Export temporarily unavailable.' } }); }
+          return route.fulfill({ contentType: format === 'csv' ? 'text/csv' : 'text/html',
+            headers: { 'Content-Disposition': `attachment; filename="skynet-results-${selected.id}.${format}"` },
+            body: format === 'csv' ? `"run_id","status"\r\n"${selected.id}","${selected.issues[0].status}"\r\n` : `<!doctype html><title>Report</title><h1>${selected.id}</h1><p>${selected.issues[0].id}</p>`,
+          });
+        }
         else if (url.pathname === '/api/audits') {
           const saved = [run || clearedRun, archived].filter(Boolean);
           const usd = saved.reduce((sum, item) => sum + (runCost(item).usd || 0), 0);
@@ -59,7 +72,10 @@ try {
           baseline: summary(archived), current: summary(run), new: run.issues, recurring: [], noLongerDetected: archived.issues,
           warning: 'Coverage may be incomplete. No longer detected does not prove a fix.',
         };
-        else if (url.pathname === `/api/audits/${archived.id}`) data = archived;
+        else if (url.pathname === `/api/audits/${archived.id}`) {
+          if (failRunLoad) { failRunLoad = false; return route.fulfill({ status: 503, json: { error: 'Saved run temporarily unavailable.' } }); }
+          data = archived;
+        }
         else if (url.pathname === `/api/audits/${archived.id}/issues/old-only/status`) {
           archived.issues[0].status = route.request().postDataJSON().status; data = archived.issues[0];
         }
@@ -79,10 +95,20 @@ try {
     await page.locator('#run-history').selectOption(archived.id);
     await page.waitForFunction(() => document.querySelector('#history-selected').textContent.includes('archived'));
     assert.equal(await page.locator('#audit').isDisabled(), true);
+    assert.equal(await page.locator('#export-results').isEnabled(), true, 'saved run export works while another run is active');
+    const archivedDownloadEvent = page.waitForEvent('download');
+    await page.locator('#export-results').click();
+    const archivedDownload = await archivedDownloadEvent;
+    assert.equal(archivedDownload.suggestedFilename(), `skynet-results-${archived.id}.html`);
+    const archiveData = await readFile(await archivedDownload.path(), 'utf8');
+    assert.match(archiveData, /<h1>archived-fixture<\/h1>/);
+    assert.match(archiveData, /<p>old-only<\/p>/);
+    await page.waitForFunction(() => !document.querySelector('#export-results').disabled);
     await page.waitForTimeout(1200);
     assert.equal(await page.locator('#run-history').inputValue(), archived.id);
     await page.locator('#run-history').selectOption('');
     await page.waitForFunction(() => document.querySelector('#activity-status').textContent.includes('running'));
+    assert.equal(await page.locator('#export-results').isDisabled(), true);
     await page.locator('#view-activity').click();
     await page.waitForFunction(() => document.querySelectorAll('.agent-card').length === 8);
     const locale = page.locator('.agent-card').filter({ has: page.locator('strong', { hasText: /^Locale$/ }) });
@@ -200,16 +226,41 @@ try {
     await page.waitForFunction(() => document.querySelector('#issues .issue-status').textContent === 'Verified');
     assert.equal(archived.issues[0].status, 'verified');
     assert.equal(run.issues[0].status, 'new');
+    // Export the reviewed historical run while a category is selected, then recover from an error.
+    await page.locator('#export-format').selectOption('csv');
+    failExport = true;
+    await page.locator('#export-results').click();
+    await page.waitForFunction(() => document.querySelector('#export-status').dataset.error === 'true');
+    assert.match(await page.locator('#export-status').textContent(), /Export temporarily unavailable/);
+    assert.equal(await page.locator('#export-results').isEnabled(), true);
+    const csvDownloadEvent = page.waitForEvent('download');
+    await page.locator('#export-results').click();
+    const csvDownload = await csvDownloadEvent;
+    assert.equal(csvDownload.suggestedFilename(), `skynet-results-${archived.id}.csv`);
+    assert.match(await readFile(await csvDownload.path(), 'utf8'), /"archived-fixture","verified"/);
+    await page.waitForFunction(() => !document.querySelector('#export-results').disabled);
+    assert.equal(await page.locator('#export-status').getAttribute('data-error'), 'false');
+    assert.deepEqual(exportRequests.map(item => item.id), [archived.id, archived.id, archived.id]);
     assert.equal(await page.evaluate(() => window.injected), undefined);
     assert.match(await page.locator('#comparison-summary').innerText(), /No earlier run/);
     await page.locator('#run-history').selectOption('');
     await page.waitForFunction(() => document.querySelector('#history-selected').textContent.includes('current workspace:'));
     assert.equal(await page.locator('#clear').isDisabled(), false);
+    // A failed selection must never enable exporting the previously displayed run.
+    failRunLoad = true;
+    await page.locator('#run-history').selectOption(archived.id);
+    await page.waitForFunction(() => document.querySelector('#message').textContent.includes('Saved run temporarily unavailable'));
+    assert.equal(await page.locator('#export-results').isDisabled(), true);
+    await page.locator('#history-refresh').click();
+    await page.waitForFunction(() => !document.querySelector('#export-results').disabled);
+    await page.locator('#run-history').selectOption('');
+    await page.waitForFunction(() => document.querySelector('#history-selected').textContent.includes('current workspace:'));
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     await page.locator('#history-panel').scrollIntoViewIfNeeded();
     await page.screenshot({ path: join(screenshotDirectory, `${viewport.width}-history.png`) });
     await page.locator('#clear').click();
     await page.waitForFunction(() => document.querySelector('#activity-status').textContent === 'Ready to check your site');
+    assert.equal(await page.locator('#export-results').isDisabled(), true);
     assert.match(await page.locator('#history-cost').innerText(), /2 saved runs/);
     assert.equal(await page.locator('#comparison-results details').count(), 0);
     await page.locator('#view-activity').click();
@@ -220,6 +271,6 @@ try {
     assert.deepEqual(errors, []);
     await page.close();
   }
-  console.log('Activity panel checks passed: desktop/mobile, saved-run selection, comparisons, review isolation, costs, polling, evidence, filters, focus and reset.');
+  console.log('Activity panel checks passed: desktop/mobile, HTML/CSV downloads, export errors and selection races, saved-run selection, comparisons, review isolation, costs, polling, evidence, filters, focus and reset.');
   console.log('Screenshots:', screenshotDirectory);
 } finally { await browser.close(); }

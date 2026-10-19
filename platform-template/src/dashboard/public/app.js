@@ -5,6 +5,8 @@ const $ = selector => document.querySelector(selector);
 const auditButton = $('#audit');
 const crawlButton = $('#crawl');
 const clearButton = $('#clear');
+const exportButton = $('#export-results');
+const exportFormat = $('#export-format');
 const activity = createActivityView(document, category => {
   showCategory(category);
   $('#issues-heading').setAttribute('tabindex', '-1');
@@ -19,11 +21,14 @@ let pageTitles = new Map();
 let selectedCategory = 'all';
 let selectedRunId = null;
 let displayedRun = null;
+let displayedRunVersion = -1;
 let serverActive = false;
 let operationBusy = false;
 let selectionLoading = false;
+let exportBusy = false;
 const history = createHistoryView(document, api, id => {
   selectedRunId = id; viewVersion++; clearTimeout(pollTimer);
+  $('#export-status').textContent = '';
   selectionLoading = true; busy(auditActive); renderIssues();
   selectedCategory = 'all'; void pollAudit();
 });
@@ -48,10 +53,15 @@ async function api(url, options) {
 }
 function busy(value) {
   auditActive = value;
-  for (const button of [auditButton, crawlButton, clearButton]) button.disabled = value || reviewBusy || selectionLoading;
+  for (const button of [auditButton, crawlButton, clearButton]) button.disabled = value || reviewBusy || selectionLoading || exportBusy;
   // Clearing always targets the current workspace, never an archived run.
   clearButton.disabled ||= Boolean(selectedRunId);
-  history.setBusy(reviewBusy || operationBusy || selectionLoading);
+  history.setBusy(reviewBusy || operationBusy || selectionLoading || exportBusy);
+  const exportDisabled = !displayedRun || displayedRunVersion !== viewVersion || displayedRun.status === 'running' || Boolean(displayedRun.persistenceError) ||
+    reviewBusy || operationBusy || selectionLoading || exportBusy;
+  exportButton.disabled = exportFormat.disabled = exportDisabled;
+  exportButton.title = !displayedRun ? 'Run a check or select a saved run to export.' : displayedRun.status === 'running' ?
+    'Wait for this run to finish before exporting.' : 'Download all results from the displayed run.';
 }
 function renderEmpty() {
   displayedRun = null; history.render(null, selectedRunId);
@@ -147,10 +157,11 @@ function renderCrawl(crawl, durationMs) {
 function renderIssues() {
   $('#findings-detail').hidden = selectedCategory === 'all' || issues.length === 0;
   $('#issues-heading').textContent = selectedCategory === 'all' ? 'All findings' : `${categoryNames[selectedCategory] || selectedCategory} findings`;
-  issuesView.render(issues, { category: selectedCategory, disabled: auditActive || reviewBusy || selectionLoading, pageTitles });
+  issuesView.render(issues, { category: selectedCategory, disabled: auditActive || reviewBusy || selectionLoading || exportBusy, pageTitles });
 }
 function renderAudit(audit) {
   displayedRun = audit;
+  displayedRunVersion = viewVersion;
   busy(serverActive || audit.status === 'running');
   history.render(audit, selectedRunId);
   activity.render(audit);
@@ -235,6 +246,31 @@ clearButton.addEventListener('click', async () => {
     $('#message').textContent = 'Could not clear results: ' + error.message;
     busy(false); await pollAudit();
   } finally { operationBusy = false; clearButton.textContent = 'Clear workspace'; busy(auditActive); renderIssues(); }
+});
+exportButton.addEventListener('click', async () => {
+  if (exportButton.disabled || !displayedRun) return;
+  const runId = displayedRun.id, format = exportFormat.value;
+  const feedback = $('#export-status');
+  exportBusy = true; busy(auditActive); renderIssues();
+  exportButton.textContent = 'Exporting…';
+  feedback.dataset.error = 'false'; feedback.textContent = 'Preparing download…';
+  try {
+    const response = await fetch(`/api/audits/${encodeURIComponent(runId)}/export?format=${encodeURIComponent(format)}`, { cache: 'no-store' });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'Download failed. Please try again.');
+    }
+    const filename = response.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1] || `skynet-results.${format}`;
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement('a'); link.href = url; link.download = filename;
+    document.body.append(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    feedback.textContent = `Download started: ${filename}`;
+  } catch (error) {
+    feedback.dataset.error = 'true'; feedback.textContent = 'Could not export results: ' + error.message;
+  } finally {
+    exportBusy = false; exportButton.textContent = 'Export Results'; busy(auditActive); renderIssues();
+  }
 });
 $('#back-to-categories').addEventListener('click', () => {
   selectedCategory = 'all'; renderCategoryCards(); renderIssues();

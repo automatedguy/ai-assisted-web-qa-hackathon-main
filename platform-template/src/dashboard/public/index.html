@@ -31,6 +31,15 @@
     </div>
     <div class="history-pagination"><button id="history-newer" type="button" disabled>Newer</button><span id="history-page">Loading history…</span><button id="history-older" type="button" disabled>Older</button></div>
     <p id="history-selected" aria-live="polite"></p>
+    <div class="export-controls" role="group" aria-label="Export results">
+      <label for="export-format">Export format<select id="export-format" disabled>
+        <option value="html">HTML report — with screenshots</option>
+        <option value="csv">CSV — findings for Excel</option>
+      </select></label>
+      <button id="export-results" type="button" disabled aria-describedby="export-note">Export Results</button>
+    </div>
+    <p id="export-note" class="activity-muted">Export the run you are viewing. HTML reports include all findings, review statuses and available screenshots in one file you can open offline. CSV contains finding data only.</p>
+    <p id="export-status" role="status"></p>
     <p id="history-error" role="alert"></p>
     <p><strong id="history-cost">No saved usage yet.</strong></p>
     <details id="history-spending"><summary>Cumulative estimated spend</summary>

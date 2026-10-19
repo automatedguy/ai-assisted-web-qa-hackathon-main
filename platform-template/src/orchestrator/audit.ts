@@ -110,7 +110,7 @@ export async function executeAudit(audit: Audit, siteUrl: string, model: string,
     await Promise.all(Array.from({ length: Math.min(2, tasks.length) }, async () => {
       while (next < tasks.length) { const task = tasks[next++]; await task(); }
     }));
-    const reconciled = reconcileFindings(audit.issues);
+    const reconciled = reconcileFindings(audit.issues, pages);
     audit.issues.splice(0, audit.issues.length, ...reconciled);
     for (const worker of audit.workers) worker.issueCount = audit.issues.filter(issue => worker.categories.includes(issue.category) && (!worker.pageUrl || worker.pageUrl === issue.location.page_url)).length;
     if (audit.issues.length) {

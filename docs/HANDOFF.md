@@ -5,7 +5,8 @@ bounded browser-state checks, semantic links and catalog regression tooling.
 
 ## Catalog implementation validation (2026-10-19)
 
-- TypeScript checks and all 77 offline tests pass, including media identity regressions.
+- TypeScript checks and all 86 offline tests pass, including media identity and
+  grouped-currency reconciliation regressions.
 - `npm run test:catalog-browser` captured 37 desktop/mobile states across the three
   practice pages and verified generated singular/empty copy, all three mobile-menu
   accessible names, four sorted-date defects, responsive resources and screenshot replay.
@@ -17,9 +18,8 @@ bounded browser-state checks, semantic links and catalog regression tooling.
   all three mobile-menu occurrences and all four sorted-date defects.
 - Case matching is not certification of correction quality or unseen-site accuracy.
   The dashboard run exposed a grouped currency-format duplicate retaining dollar
-  symbols, alongside the correct per-plan euro fixes. Follow-up work: reconcile
-  grouped findings and improve
-  screenshot reliability and Business-row highlighting. Subtitle findings have
+  symbols, alongside the correct per-plan euro fixes (addressed below). Follow-up
+  work: improve screenshot reliability and Business-row highlighting. Subtitle findings have
   textual evidence but no highlighted rendered element. One non-catalog translation
   finding also varied between major and minor severity across these runs.
 - Production code does not import the catalog; its examples are test-only.
@@ -32,6 +32,17 @@ asset/check are retained together; different checks remain separate. Legacy medi
 IDs need one fresh review because they lack content fingerprints. Other agents'
 exact-quote identity and in-memory-only review persistence are unchanged. The live
 catalog runs above predate this identity change; no additional paid audit was run.
+
+Currency reconciliation follow-up: exact page/element spans and row context now
+allow a grouped Formatting finding to be absorbed into its per-plan Locale
+findings only when every quoted price is covered unambiguously. IDs, source-backed
+corrections and review decisions remain unchanged. Partial or ambiguous coverage
+is retained for review. Offline replay of dashboard audit `8183342d` reduced its
+33 findings to 32, removing only the conflicting dollar-formatting group while
+retaining 25/25 catalog cases, all three menu occurrences and four sorted dates.
+This was a replay of saved results, not a new paid audit or a dashboard mutation.
+Mock audit tests also verify source-backed corrections and final worker counts
+for grouped and individual responses.
 
 Use Git history to identify the current commit and publication status.
 Remote: https://github.com/automatedguy/ai-assisted-web-qa-hackathon-main.

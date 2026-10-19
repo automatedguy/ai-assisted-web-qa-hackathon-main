@@ -191,6 +191,15 @@ Screenshots replay the state and refuse to attach the wrong responsive image.
 Repeated text at distinct elements gets distinct identities. Reconciliation removes
 overlapping voice findings and gives currency-identity corrections precedence over
 conflicting notation-only fixes at the same element; independent locations remain.
+Grouped currency-format findings spanning multiple cells are also reconciled when
+every explicit quoted price maps unambiguously to a per-location Locale finding
+on the same page. Exact text spans and row context distinguish equal prices in
+different rows. Each Locale finding retains its ID, correction and review status,
+with a supporting notation note added; the conflicting grouped fix is removed.
+Uncovered prices, ambiguous locations, conflicting Locale candidates and browser
+state mismatches leave the Formatting finding visible. No replacement price or
+currency conversion is inferred during reconciliation. Worker counts reflect
+the reconciled findings.
 For simple table prices, an unambiguous matching source row and required currency
 also enable deterministic correction of the notation while preserving the exact
 source amount. Ambiguous rows, grouped amounts and absent source authority are not

@@ -57,9 +57,9 @@ test('locale and formatting workflow with alternate profiles and a local model',
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const address = server.address(); assert(address && typeof address === 'object');
   const origin = `http://127.0.0.1:${address.port}`;
-  const names = ['OPENAI_BASE_URL', 'OPENAI_API_KEY', 'LINGUISTIC_ASSET_PATH', 'OPENAI_INPUT_USD_PER_MILLION', 'OPENAI_OUTPUT_USD_PER_MILLION'];
+  const names = ['OPENAI_BASE_URL', 'OPENAI_API_KEY', 'LINGUISTIC_ASSET_PATH', 'REFERENCE_CONTENT_PATH', 'OPENAI_INPUT_USD_PER_MILLION', 'OPENAI_OUTPUT_USD_PER_MILLION'];
   const previous = Object.fromEntries(names.map(name => [name, process.env[name]]));
-  Object.assign(process.env, { OPENAI_BASE_URL: origin + '/v1', OPENAI_API_KEY: 'mock', LINGUISTIC_ASSET_PATH: profilePath,
+  Object.assign(process.env, { OPENAI_BASE_URL: origin + '/v1', OPENAI_API_KEY: 'mock', LINGUISTIC_ASSET_PATH: profilePath, REFERENCE_CONTENT_PATH: directory,
     OPENAI_INPUT_USD_PER_MILLION: '1', OPENAI_OUTPUT_USD_PER_MILLION: '2' });
   const finding = (rule: string, evidence: string, expected = 'Follow the configured rule.'): Findings['issues'][number] => ({
     rule, evidence, expected, severity: 'minor', description: 'The content violates the configured rule.', confidence: 0.95, suggested_fix: expected,
@@ -106,6 +106,33 @@ test('locale and formatting workflow with alternate profiles and a local model',
       findings = [finding('date_format', '03/14/2026')];
       const audit = await run(); assert.deepEqual(audit.issues, []); assert.equal(worker(audit).status, 'completed');
       assert.equal(localeWorker(audit).status, 'completed');
+    });
+    await t.test('grouped and individual currency formatting retain source-backed per-plan fixes and reconciled worker counts', async () => {
+      const plans = [['Launch', '12.49'], ['Studio', '24.99'], ['Enterprise', '79.95']];
+      await writeFile(join(directory, 'plans.md'), plans.map(([name, amount]) => `- **${name}** — ${amount} €/month`).join('\n'));
+      await setup({ target_locale: 'es-ES', date_format: 'DD/MM/YYYY', currency_format: 'EUR, symbol after amount, comma decimal' },
+        '<table>' + plans.map(([name, amount]) => `<tr><td>${name}</td><td>$${amount}/mes</td></tr>`).join('') + '</table><p>03/14/2026</p>',
+        { reference_content: [{ page: '/', source_text_path: 'plans.md' }] });
+      const currency = plans.map(([, amount]) => finding('currency', `$${amount}/mes`, '19,99 €'));
+      const grouped = finding('currency_format', plans.map(([name, amount]) => `${name} $${amount}/mes`).join(' '), 'Keep dollar symbols.');
+      findings = [...currency, grouped];
+      const first = await run(); assert.equal(first.status, 'completed'); assert.equal(first.issues.length, 4);
+      assert.equal(localeWorker(first).issueCount, 3); assert.equal(worker(first).issueCount, 1);
+      const prices = first.issues.filter(issue => issue.category === 'locale_rules');
+      assert.deepEqual(prices.map(issue => issue.expected), ['12,49 €/mes', '24,99 €/mes', '79,95 €/mes']);
+      assert.equal(new Set(prices.map(issue => issue.location.selector_or_xpath)).size, 3);
+      for (const [index, issue] of prices.entries()) {
+        assert.match(issue.suggested_fix!, /preserving the mapped source amount/);
+        assert.match(issue.description, /also violates currency notation/);
+        issue.status = (['verified', 'dismissed', 'escalated'] as const)[index];
+      }
+      findings = [...currency, ...plans.map(([, amount]) => finding('currency_format', `$${amount}/mes`, 'Keep dollars.'))];
+      const second = await run(first.issues); assert.equal(second.status, 'completed');
+      assert.equal(second.issues.length, 4); assert.equal(worker(second).issueCount, 1);
+      for (const price of prices) {
+        const current = second.issues.find(issue => issue.id === price.id)!;
+        assert.equal(current.status, price.status); assert.equal(current.suggested_fix, price.suggested_fix);
+      }
     });
     await t.test('supports explicit number, address, phone and capitalization rules', async () => {
       await setup({ target_locale: 'fr-FR', number_format: 'comma decimal', address_format: 'postcode before city', phone_format: 'international +33', capitalization: 'sentence case headings' },

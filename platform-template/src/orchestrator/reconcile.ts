@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { QaIssue } from "../issues.js";
 import type { CrawledPage } from "../crawler/crawl.js";
+import { coveredCurrencyFindings } from "./currency-reconciliation.js";
 
 export function locateFindings(issues: QaIssue[], page?: CrawledPage): QaIssue[] {
   if (!page?.elements) return issues;
@@ -18,24 +19,34 @@ export function locateFindings(issues: QaIssue[], page?: CrawledPage): QaIssue[]
   });
 }
 
-export function reconcileFindings(issues: QaIssue[]): QaIssue[] {
+function includeCurrencyNotation(currency: QaIssue, format: QaIssue) {
+  const note = `The same expression also violates currency notation: ${format.assessment!.rule!.value}.`;
+  if (!currency.description.includes(note)) currency.description += " " + note;
+}
+
+export function reconcileFindings(issues: QaIssue[], pages: CrawledPage[] = []): QaIssue[] {
   const result: QaIssue[] = [];
   const ordered = [...issues].sort((a, b) => Number(b.assessment?.rule?.id === "currency") - Number(a.assessment?.rule?.id === "currency") || b.evidence.length - a.evidence.length);
   for (const issue of ordered) {
+    const covered = coveredCurrencyFindings(issue, result, pages);
+    if (covered) {
+      for (const currency of covered) includeCurrencyNotation(currency, issue);
+      continue;
+    }
     const same = result.find(existing => {
       if (!issue.location.selector_or_xpath || existing.location.page_url !== issue.location.page_url || existing.location.selector_or_xpath !== issue.location.selector_or_xpath) return false;
       if (existing.reproduction?.attribute !== issue.reproduction?.attribute) return false;
       if (existing.assessment?.check !== issue.assessment?.check) return false;
       const overlap = existing.evidence.includes(issue.evidence) || issue.evidence.includes(existing.evidence);
-      const currencyOverlap = existing.assessment?.rule?.id === "currency" && issue.assessment?.rule?.id === "currency_format";
+      // With page evidence, the all-price coverage check above owns currency merging.
+      const currencyOverlap = !pages.length && existing.assessment?.rule?.id === "currency" && issue.assessment?.rule?.id === "currency_format";
       // Never merge unrelated defects in the same paragraph, independent media resources or distinct state text.
       return overlap && (currencyOverlap || existing.category === issue.category &&
         (existing.category === "brand_voice" || existing.expected === issue.expected && existing.assessment?.rule?.id === issue.assessment?.rule?.id));
     });
     if (!same) result.push(issue);
     else if (same.assessment?.rule?.id === "currency" && issue.assessment?.rule?.id === "currency_format") {
-      const note = `The same expression also violates currency notation: ${issue.assessment.rule.value}.`;
-      if (!same.description.includes(note)) same.description += " " + note;
+      includeCurrencyNotation(same, issue);
     }
   }
   return issues.filter(issue => result.includes(issue));

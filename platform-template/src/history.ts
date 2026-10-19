@@ -22,6 +22,7 @@ export function summarizeRun(run: Audit) {
     }
   }
   return { id: run.id, kind: run.kind ?? 'audit', siteUrl: run.siteUrl ?? run.crawl?.startUrl ?? '',
+    profileName: run.configuration?.profileName, profileFingerprint: run.configuration?.profileFingerprint,
     startedAt: run.startedAt, finishedAt: run.finishedAt, status: run.status, durationMs: run.durationMs,
     issueCount: run.issues.length, cost: runCost(run), models, agents };
 }
@@ -46,6 +47,7 @@ export function compareRuns(current: Audit, baseline: Audit) {
   if (current.id === baseline.id) throw new Error('Choose a different baseline run.');
   if ((current.siteUrl ?? current.crawl?.startUrl) !== (baseline.siteUrl ?? baseline.crawl?.startUrl) ||
       (current.kind ?? 'audit') !== (baseline.kind ?? 'audit')) throw new Error('Compare runs of the same site and check type.');
+  if (current.configuration?.profileFingerprint !== baseline.configuration?.profileFingerprint) throw new Error('Compare runs using the same linguistic profile and reference content.');
   if (baseline.startedAt > current.startedAt) throw new Error('The baseline must be an earlier run.');
   const before = new Set(baseline.issues.map(issue => issue.id));
   const after = new Set(current.issues.map(issue => issue.id));

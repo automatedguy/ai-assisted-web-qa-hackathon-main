@@ -21,11 +21,11 @@ export async function exportResults(run: Audit, format: ExportFormat, reviewHist
   }
 
   const headers = ['run_id', 'run_kind', 'site_url', 'run_status', 'started_at', 'finished_at', 'exported_at',
-    'target_locale', 'id', 'category', 'severity', 'status', 'page_url', 'selector_or_xpath', 'element_type',
+    'target_locale', 'linguistic_asset', 'id', 'category', 'severity', 'status', 'page_url', 'selector_or_xpath', 'element_type',
     'description', 'evidence', 'expected', 'suggested_fix', 'confidence', 'assessment_method', 'assessment_check',
     'rule_id', 'rule_value', 'screenshot_path', 'screenshot_highlighted', 'screenshot_note', 'reproduction_json'];
   const rows = run.issues.map(issue => [run.id, summary.kind, summary.siteUrl, run.status, run.startedAt, run.finishedAt,
-    exportedAt, run.targetLocale, issue.id, issue.category, issue.severity, issue.status, issue.location.page_url,
+    exportedAt, run.targetLocale, run.configuration?.profileName, issue.id, issue.category, issue.severity, issue.status, issue.location.page_url,
     issue.location.selector_or_xpath, issue.location.element_type, issue.description, issue.evidence, issue.expected,
     issue.suggested_fix, issue.confidence, issue.assessment?.method, issue.assessment?.check, issue.assessment?.rule?.id,
     issue.assessment?.rule?.value, issue.visual_evidence?.screenshot_url, issue.visual_evidence?.highlighted,

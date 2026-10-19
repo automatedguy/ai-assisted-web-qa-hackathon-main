@@ -24,13 +24,21 @@ const validateProfile = new Ajv().compile<Profile>({
     } },
   },
 });
-export async function loadProfile(): Promise<Profile> {
-  const path = process.env.LINGUISTIC_ASSET_PATH ?? resolve(repositoryRoot, "linguistic-assets/practice-profile.yaml");
+export function parseProfile(source: string): Profile {
   let value: unknown;
-  try { value = parse(await readFile(path, "utf8"), { maxAliasCount: 50 }); }
+  try { value = parse(source, { maxAliasCount: 50 }); }
   catch { throw new Error("Cannot read or parse LINGUISTIC_ASSET_PATH."); }
   if (!validateProfile(value)) throw new Error("Invalid linguistic profile: " + new Ajv().errorsText(validateProfile.errors));
   return value;
+}
+export function defaultProfilePath() {
+  return process.env.LINGUISTIC_ASSET_PATH ?? resolve(repositoryRoot, "linguistic-assets/practice-profile.yaml");
+}
+export async function loadProfile(path = defaultProfilePath()): Promise<Profile> {
+  let source: string;
+  try { source = await readFile(path, 'utf8'); }
+  catch { throw new Error('Cannot read LINGUISTIC_ASSET_PATH.'); }
+  return parseProfile(source);
 }
 export async function loadIssueValidator() {
   const path = process.env.ISSUE_SCHEMA_PATH ?? resolve(repositoryRoot, "docs/ISSUE_SCHEMA.json");

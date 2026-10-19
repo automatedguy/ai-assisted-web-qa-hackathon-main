@@ -52,6 +52,10 @@ try {
       if (url.pathname.startsWith('/api/')) {
         let data;
         if (url.pathname === '/api/health') data = { apiKeyConfigured: false, model: 'fixture-model' };
+        else if (url.pathname === '/api/test-configuration') data = { revision: 'fixture-config',
+          sites: [{ id: 'environment', name: 'Configured site', url: 'https://example.test/' }],
+          profiles: [{ id: 'environment', name: 'Fixture profile', locale: 'fr-FR', available: true, referenceCount: 0 }],
+          selected: { siteId: 'environment', profileId: 'environment' } };
         else if (url.pathname.endsWith('/export')) {
           const selected = url.pathname === `/api/audits/${archived.id}/export` ? archived : run;
           const format = url.searchParams.get('format');

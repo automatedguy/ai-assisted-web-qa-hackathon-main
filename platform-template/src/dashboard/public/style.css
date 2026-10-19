@@ -28,6 +28,15 @@ body { margin: 0; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Se
 #export-status:empty { display: none; }
 #export-status[data-error="true"] { color: #a11; }
 main { max-width: 1168px; margin: 28px auto 48px; padding: 0 24px; }
+.configuration-controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+.configuration-controls label { flex: 1 1 240px; min-width: 0; }
+.configuration-controls select, .configuration-controls input { display: block; width: 100%; min-width: 0; margin: 4px 0; padding: 10px; border: 1px solid var(--line); border-radius: 6px; font: inherit; background: white; }
+.configuration-controls input[type="file"] { font-size: .8rem; }
+#test-configuration details { padding: 12px; margin: 12px 0; }
+#test-configuration summary { margin-bottom: 10px; }
+#configuration-current, #configuration-message { overflow-wrap: anywhere; }
+#configuration-message:empty { display: none; }
+#configuration-message[data-error="true"] { color: #a11; }
 .brand-header { background: #151515; border-bottom: 3px solid var(--accent); }
 .brand-inner { display: flex; align-items: center; gap: 32px; max-width: 1168px; margin: 0 auto; padding: 22px 24px; }
 .brand-copy { min-width: 0; }
@@ -125,7 +134,7 @@ a { color: #852323; text-underline-offset: 3px; } a:hover { color: var(--accent)
 [data-state="running"] .activity-dot { background: transparent; border-color: #dedee2; border-top-color: #49494f; animation: activity-spin 1s linear infinite; }
 #view-activity { white-space: nowrap; margin: 0; color: #852323; border-color: #ecdada; background: var(--accent-soft); }
 #view-activity:hover { background: #f7e4e4; border-color: #d9b4b4; }
-button:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 #activity-panel { position: fixed; inset: 0 0 0 auto; margin: 0; width: min(640px, 100vw); height: 100%; height: 100dvh; max-height: none; max-width: 100vw; box-sizing: border-box; padding: 0; border: 0; border-left: 1px solid var(--line); color: var(--ink); background: var(--surface); box-shadow: -12px 0 50px #00000012; }
 #activity-panel[open] { display: flex; flex-direction: column; }
 #activity-panel::backdrop { background: #15151533; }

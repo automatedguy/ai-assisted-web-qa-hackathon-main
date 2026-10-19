@@ -44,6 +44,16 @@ export class RunStore {
     finally { this.inTransaction = false; }
   }
   close() { this.db.close(); }
+  configuration(): unknown {
+    const row = this.db.prepare("SELECT value FROM metadata WHERE key='test_configuration'").get() as { value: string } | undefined;
+    return row ? JSON.parse(row.value) : null;
+  }
+  saveConfiguration(value: unknown, clearWorkspace = false) {
+    this.transaction(() => {
+      this.db.prepare("INSERT INTO metadata VALUES ('test_configuration', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(JSON.stringify(value));
+      if (clearWorkspace) this.db.prepare("DELETE FROM metadata WHERE key='current_run'").run();
+    });
+  }
   save(run: Audit, makeCurrent = false) {
     const summary = summarizeRun(run);
     this.transaction(() => {
@@ -73,12 +83,13 @@ export class RunStore {
   previous(run: Audit): Audit | null {
     const summary = summarizeRun(run);
     const row = this.db.prepare(`SELECT snapshot FROM runs WHERE site_url=? AND kind=? AND id<>? AND started_at<=?
+      AND json_extract(snapshot, '$.configuration.profileFingerprint') IS ?
       AND status<>'running' ORDER BY started_at DESC, rowid DESC LIMIT 1`)
-      .get(summary.siteUrl, summary.kind, run.id, run.startedAt) as { snapshot: string } | undefined;
+      .get(summary.siteUrl, summary.kind, run.id, run.startedAt, run.configuration?.profileFingerprint ?? null) as { snapshot: string } | undefined;
     return row ? JSON.parse(row.snapshot) : null;
   }
-  reviewIssues(siteUrl: string): QaIssue[] {
-    return (this.db.prepare('SELECT issue FROM review_decisions WHERE site_url=?').all(siteUrl) as { issue: string }[])
+  reviewIssues(siteUrl: string, profileFingerprint?: string): QaIssue[] {
+    return (this.db.prepare('SELECT issue FROM review_decisions WHERE site_url=?').all(reviewScope(siteUrl, profileFingerprint)) as { issue: string }[])
       .map(row => JSON.parse(row.issue));
   }
   review(runId: string, issueId: string, status: QaIssue['status']) {
@@ -92,7 +103,7 @@ export class RunStore {
       issue.status = status;
       this.save(run);
       this.db.prepare(`INSERT INTO review_decisions VALUES (?, ?, ?) ON CONFLICT(site_url, issue_id) DO UPDATE SET issue=excluded.issue`)
-        .run(run.siteUrl ?? run.crawl?.startUrl ?? '', issue.id, JSON.stringify(issue));
+        .run(reviewScope(run.siteUrl ?? run.crawl?.startUrl ?? '', run.configuration?.profileFingerprint), issue.id, JSON.stringify(issue));
       this.db.prepare('INSERT INTO review_events (run_id, issue_id, previous_status, status, reviewed_at) VALUES (?, ?, ?, ?, ?)')
         .run(run.id, issue.id, previous, status, new Date().toISOString());
       return issue;
@@ -101,11 +112,11 @@ export class RunStore {
   reviews(runId: string) {
     return this.db.prepare('SELECT issue_id AS issueId, previous_status AS previousStatus, status, reviewed_at AS reviewedAt FROM review_events WHERE run_id=? ORDER BY id').all(runId);
   }
-  clearCurrent(siteUrl: string) {
+  clearCurrent(siteUrl: string, profileFingerprint?: string) {
     this.transaction(() => {
       this.db.prepare("DELETE FROM metadata WHERE key='current_run'").run();
       // Preserve historical decisions, but reset carry-forward decisions for a fresh workspace.
-      this.db.prepare('DELETE FROM review_decisions WHERE site_url=?').run(siteUrl);
+      this.db.prepare('DELETE FROM review_decisions WHERE site_url=? OR site_url=?').run(siteUrl, reviewScope(siteUrl, profileFingerprint));
     });
   }
   recoverInterrupted() {
@@ -128,4 +139,7 @@ export class RunStore {
     });
     return rows.length;
   }
+}
+function reviewScope(siteUrl: string, profileFingerprint?: string) {
+  return profileFingerprint ? `${siteUrl}\nprofile:${profileFingerprint}` : siteUrl;
 }

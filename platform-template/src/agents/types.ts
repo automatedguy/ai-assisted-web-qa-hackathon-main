@@ -20,6 +20,7 @@ export type WorkerRun = {
 export type AgentContext = {
   crawl: CrawlResult; page?: CrawledPage; profile: Profile; model: string;
   report: WorkerRun;
+  referenceContentPath?: string;
 };
 export type Agent = {
   id: string; categories: QaIssue["category"][]; scope: "site" | "page";

@@ -88,18 +88,75 @@ The practice site must be running at `SITE_URL` (default http://localhost:8080).
   from the latest server snapshot, so this is not a durable event history and
   brief transitions between polls may not appear. Clear workspace resets the view.
 
+## Switch sites and linguistic assets
+
+Use **Test configuration** at the top of the dashboard:
+
+1. Choose a **Site under test**, or expand **Add a website** and save its name and
+   URL. The website must already be running and reachable from the QA server.
+2. Choose its **Linguistic asset**, or expand **Add a linguistic asset** and upload
+   the repository's YAML profile. If it maps translation references, also choose
+   the `reference-content` folder containing the mapped Markdown files. Nested
+   directories are preserved; paths may be relative to that folder or start with
+   `reference-content/`. Profiles without mappings do not need a reference folder.
+3. Click **Apply selection**, then **Run audit** or **Crawl and check links only**.
+   Pending dropdown changes disable run buttons until applied. **Reload choices**
+   discards pending choices and reloads the saved configuration.
+
+The initial choices come from `SITE_URL` and `LINGUISTIC_ASSET_PATH`. Other `.yaml`
+and `.yml` files alongside that profile also appear in the selector and use the
+configured `REFERENCE_CONTENT_PATH`. Uploaded profiles have their own reference
+directory, so switching repositories does not mix their translation sources.
+Missing/invalid profiles are shown as unavailable; applying a selection validates
+the profile and all mapped references before changing the current workspace.
+Uploads allow a 64 KB YAML file and up to 100 Markdown files, each at most 24,000
+characters, with a combined reference upload limit of 6 MB.
+
+Adding a website stores its URL; it does not clone a repository or start its server.
+For another repository, start that site's application first, then add its URL and
+upload its assets. In Docker, use a URL reachable from the platform container:
+the Compose service name for another service on the network, or
+`host.docker.internal` for a host service on Docker Desktop. Container `localhost`
+refers to the platform container itself.
+
+Saved choices and the applied selection persist in SQLite. Uploaded files live in
+`QA_DATA_DIR/profiles/` and are included in the existing Docker data volume.
+Environment files and mounted inputs are never rewritten. Applying clears the
+current workspace view while retaining saved runs, screenshots, reviews and costs.
+Changes are blocked during a run. Each run records its selected site/profile names;
+history and exports retain them after later switches. Existing browser tabs must
+reload their choices if another tab changes the configuration.
+
+Configuration API:
+
+- `GET /api/test-configuration`: choices, selected IDs, revision and busy state.
+- `POST /api/test-configuration/sites`: `{ revision, name, url }` adds a website.
+- `POST /api/test-configuration/profiles`: `{ revision, name, yaml, references }`,
+  where `references` contains `{ path, content }` Markdown entries.
+- `PATCH /api/test-configuration`: `{ revision, siteId, profileId }` validates and
+  applies the selection. Invalid input returns 400; stale revisions or active runs
+  return 409. Add endpoints return the updated choices and `addedId`.
+
+The dashboard supplies `configurationRevision` when starting a run so a stale tab
+cannot start checks against an unexpected selection. API callers can also supply it
+in `POST /api/audits` or `POST /api/crawl`; omitted values use the saved selection.
+
 ## Persistent history, comparisons and spending
 
 SQLite stores full run snapshots, worker reports, token/rate data, findings and
 timestamped review changes. Reviews target a specific run; editing an older run
 does not rewrite another saved run. Explicit decisions carry forward to future
-runs of the same configured site when the stable finding ID matches, even if a
+runs of the same configured site and linguistic profile/reference content when the stable finding ID matches, even if a
 finding disappeared in an intermediate run. A later explicit review takes precedence.
 Clear workspace resets this carry-forward without erasing historical decisions.
 Sites are scoped by their normalized configured start URL, not just hostname.
+Full audits additionally use a fingerprint of the parsed profile and mapped
+reference contents. Different profiles cannot inherit each other's review decisions.
+Link-only runs use site scope. Older full audits without a profile fingerprint remain
+readable/exportable but do not supply carry-forward decisions or baselines to new audits.
 
 **Compare findings** defaults to the most recent earlier run of the same site and
-check type. Choose a manual baseline from the current history page (Newer/Older
+check type and profile fingerprint. Choose a manual baseline from the current history page (Newer/Older
 loads more choices); automatic comparison searches all history. It shows new,
 recurring and **no longer detected** findings, matched by stable ID. Missing findings
 are not confirmed fixes. Partial coverage, changed policy/content/selectors or
@@ -163,6 +220,11 @@ its temporary screenshots and does not touch a running audit.
 `npm run test:report-ui` verifies standalone HTML reports with embedded images
 offline, on desktop and mobile, including missing-image notices and print styles.
 Set `QA_BROWSER_PATH` to your Chrome executable if needed.
+`npm run test:configuration-ui` exercises site/profile selection, YAML and reference
+folder uploads, persistence in the UI, failed-save recovery and active-run locking
+on desktop and mobile with mocked API data. Configuration unit/API tests in
+`npm test` also verify actual restart persistence, selected-site execution, reference
+isolation, revision conflicts and separate review/baseline scopes using local fixtures.
 `docker compose up --build` from the repository root starts
 both services; free ports 8080 and 3000 first if already running separately.
 
@@ -172,8 +234,8 @@ both services; free ports 8080 and 3000 first if already running separately.
 |---|---|
 | `OPENAI_API_KEY` | Server-side credential; keep it in ignored `.env` |
 | `OPENAI_MODEL` | Model supporting Responses structured outputs |
-| `SITE_URL` | Site to crawl |
-| `LINGUISTIC_ASSET_PATH` | YAML profile; defaults to the supplied local practice profile |
+| `SITE_URL` | Initial configured site; the dashboard can select another saved URL |
+| `LINGUISTIC_ASSET_PATH` | Initial YAML profile and directory for server asset choices; defaults to the supplied local practice profile |
 | `ISSUE_SCHEMA_PATH` | Issue JSON Schema; defaults to `docs/ISSUE_SCHEMA.json` locally |
 | `REFERENCE_CONTENT_PATH` | Reference directory; defaults to `/data/reference-content` when mounted, otherwise the repository's `reference-content/` |
 | `OPENAI_INPUT_USD_PER_MILLION` | Optional input token rate for the configured model |

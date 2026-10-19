@@ -6,7 +6,7 @@ export function createHistoryView(document, api, onSelect) {
   const $ = selector => document.querySelector(selector);
   let offset = 0, selectedId = '', run = null, runs = [], total = 0;
   let loadVersion = 0, comparisonVersion = 0, comparisonKey = null, disabled = false;
-  const label = item => `${new Date(item.startedAt).toLocaleString()} · ${item.kind === 'crawl' ? 'Links only' : 'Audit'} · ${item.status} · ${item.issueCount ?? item.issues?.length ?? 0} findings · ${item.siteUrl || item.crawl?.startUrl || 'Site not recorded'} · ${item.id.slice(0, 8)}`;
+  const label = item => `${new Date(item.startedAt).toLocaleString()} · ${item.kind === 'crawl' ? 'Links only' : 'Audit'} · ${item.status} · ${item.issueCount ?? item.issues?.length ?? 0} findings · ${item.siteUrl || item.crawl?.startUrl || 'Site not recorded'}${item.profileName || item.configuration?.profileName ? ' · ' + (item.profileName || item.configuration.profileName) : ''} · ${item.id.slice(0, 8)}`;
   function options(select, items, firstLabel, selected) {
     const values = [{ value: '', label: firstLabel }, ...items.map(item => ({ value: item.id, label: label(item) }))];
     const key = JSON.stringify(values);
@@ -29,7 +29,7 @@ export function createHistoryView(document, api, onSelect) {
     $('#history-refresh').disabled = disabled;
     const baseline = $('#comparison-baseline').value;
     const compatible = runs.filter(item => run && item.id !== run.id && item.siteUrl === (run.siteUrl || run.crawl?.startUrl) &&
-      item.kind === (run.kind || 'audit') && item.startedAt <= run.startedAt && item.status !== 'running');
+      item.kind === (run.kind || 'audit') && item.profileFingerprint === run.configuration?.profileFingerprint && item.startedAt <= run.startedAt && item.status !== 'running');
     // Keep an explicitly chosen baseline across history pagination/polling.
     const oldOption = [...$('#comparison-baseline').options].find(item => item.value === baseline);
     options($('#comparison-baseline'), compatible, 'Previous same-site run (automatic)', baseline);

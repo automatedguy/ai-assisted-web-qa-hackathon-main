@@ -11,6 +11,7 @@
     "test": "QA_DISABLE_SCREENSHOTS=1 QA_DISABLE_BROWSER_CHECKS=1 node --import tsx --test test/*.test.ts",
     "test:activity-ui": "node test/activity-panel.browser.mjs",
     "test:report-ui": "node --import tsx test/html-report.browser.mjs",
+    "test:configuration-ui": "node test/configuration.browser.mjs",
     "test:catalog-browser": "node --import tsx test/catalog.browser.ts",
     "test:catalog-live": "node --env-file=../.env --import tsx test/catalog-live.ts"
   },

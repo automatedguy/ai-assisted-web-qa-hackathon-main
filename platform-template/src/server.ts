@@ -6,24 +6,27 @@ import { createAudit, executeAudit, type Audit } from "./orchestrator/audit.js";
 import { fileURLToPath } from "node:url";
 import { crawlSite, type CrawlResult } from "./crawler/crawl.js";
 import { mkdirSync } from "node:fs";
-import { databasePath, screenshotDir } from './storage-paths.js';
+import { databasePath, screenshotDir, dataDir } from './storage-paths.js';
 import { RunStore } from './run-store.js';
 import { compareRuns } from './history.js';
 import { runCost } from './dashboard/public/costs.js';
 import { exportResults } from './results-export.js';
+import { TestConfiguration, ConfigurationError } from './test-configuration.js';
 
 const app = express();
 const port = Number(process.env.PORT ?? 3000);
 const model = process.env.OPENAI_MODEL ?? "gpt-6-astra";
-const siteUrl = new URL(process.env.SITE_URL ?? "http://localhost:8080").href;
 const store = new RunStore(databasePath);
 store.recoverInterrupted();
+const testConfiguration = new TestConfiguration(store, dataDir);
 let latestAudit: Audit | null = store.current();
 let latestCrawl: CrawlResult | null = latestAudit?.crawl ?? null;
 let latestIssues: QaIssue[] = latestAudit?.issues ?? [];
 let crawling = false;
+let preparingRun = false;
+let configuring = false;
 mkdirSync(screenshotDir, { recursive: true });
-const active = () => crawling || latestAudit?.status === 'running';
+const active = () => preparingRun || crawling || latestAudit?.status === 'running';
 function checkpoint(audit: Audit) {
   try { delete audit.persistenceError; store.save(audit); }
   catch (error) {
@@ -31,12 +34,18 @@ function checkpoint(audit: Audit) {
     console.error('History checkpoint failed:', error);
   }
 }
-function beginRun(kind: 'audit' | 'crawl') {
-  const run = createAudit(); run.kind = kind; run.siteUrl = siteUrl;
-  if (kind === 'audit') run.model = model;
-  store.save(run, true); // Fail before starting network/model work if storage is unavailable.
-  latestAudit = run; latestIssues = run.issues; latestCrawl = null;
-  return run;
+async function beginRun(kind: 'audit' | 'crawl', revision: unknown) {
+  if (active() || configuring) throw new ConfigurationError('Wait for the current audit, crawl or configuration change to finish.', 409);
+  testConfiguration.checkRevision(revision, false);
+  preparingRun = true;
+  try {
+    const selected = await testConfiguration.resolveSelection(undefined, kind === 'audit');
+    const run = createAudit(); run.kind = kind; run.siteUrl = selected.site.url; run.configuration = selected.configuration;
+    if (kind === 'audit') run.model = model;
+    store.save(run, true); // Fail before starting network/model work if storage is unavailable.
+    latestAudit = run; latestIssues = run.issues; latestCrawl = null;
+    return { run, selected };
+  } finally { preparingRun = false; }
 }
 const checkpointTimer = setInterval(() => {
   if (latestAudit?.status === 'running' || latestAudit?.persistenceError) {
@@ -46,9 +55,33 @@ const checkpointTimer = setInterval(() => {
 }, 1000);
 checkpointTimer.unref();
 
-app.use(express.json());
+app.use(express.json({ limit: '8mb' }));
 app.use(express.static(fileURLToPath(new URL("./dashboard/public/", import.meta.url))));
 app.use("/api/screenshots", express.static(screenshotDir, { fallthrough: false, maxAge: "1h" }));
+
+app.get('/api/test-configuration', async (_request, response) => {
+  response.set('Cache-Control', 'no-store');
+  response.json({ ...await testConfiguration.catalog(), busy: active() || configuring });
+});
+app.post(['/api/test-configuration/sites', '/api/test-configuration/profiles'], async (request, response) => {
+  if (active() || configuring) throw new ConfigurationError('Wait for the current run or configuration change to finish.', 409);
+  configuring = true;
+  try {
+    const body = request.body ?? {};
+    const id = request.path.endsWith('/sites') ? testConfiguration.addSite(body) : await testConfiguration.uploadProfile(body);
+    response.status(201).json({ ...await testConfiguration.catalog(), addedId: id });
+  } finally { configuring = false; }
+});
+app.patch('/api/test-configuration', async (request, response) => {
+  if (active() || configuring) throw new ConfigurationError('Wait for the current run or configuration change to finish.', 409);
+  if (latestAudit?.persistenceError) throw new ConfigurationError(latestAudit.persistenceError, 503);
+  configuring = true;
+  try {
+    await testConfiguration.select(request.body ?? {});
+    latestAudit = null; latestCrawl = null; latestIssues = [];
+    response.json(await testConfiguration.catalog());
+  } finally { configuring = false; }
+});
 
 app.get("/api/audits/latest", (_request, response) => response.json(latestAudit));
 app.get('/api/audits', (request, response) => {
@@ -57,7 +90,7 @@ app.get('/api/audits', (request, response) => {
     response.status(400).json({ error: 'Use an integer limit from 1 to 100 and a nonnegative offset.' }); return;
   }
   response.json({ ...store.list(limit, offset), spending: store.spending(), currentRunId: latestAudit?.id ?? null,
-    activeRunId: active() ? latestAudit?.id : null });
+    activeRunId: (crawling || latestAudit?.status === 'running') ? latestAudit?.id : null });
 });
 app.get('/api/audits/:id', (request, response) => {
   const run = latestAudit?.id === request.params.id ? latestAudit : store.get(request.params.id);
@@ -102,15 +135,11 @@ app.get('/api/audits/:id/reviews', (request, response) => {
   if (!store.get(request.params.id)) { response.status(404).json({ error: 'Run not found.' }); return; }
   response.json(store.reviews(request.params.id));
 });
-app.post("/api/audits", (_request, response) => {
-  if (active()) {
-    response.status(409).json({ error: "An audit or crawl is already running." });
-    return;
-  }
-  const previous = store.reviewIssues(siteUrl);
-  const audit = beginRun('audit');
+app.post("/api/audits", async (request, response) => {
+  const { run: audit, selected } = await beginRun('audit', request.body?.configurationRevision);
+  const previous = store.reviewIssues(selected.site.url, selected.configuration.profileFingerprint);
   response.status(202).json(audit);
-  void executeAudit(audit, siteUrl, model, previous, () => checkpoint(audit)).then(() => {
+  void executeAudit(audit, selected.site.url, model, previous, () => checkpoint(audit), { profile: selected.profile!, referenceContentPath: selected.referenceContentPath }).then(() => {
     latestCrawl = audit.crawl ?? null;
   });
 });
@@ -124,23 +153,29 @@ app.get("/api/health", (_request, response) => {
 });
 
 app.get("/api/pages", (_request, response) => {
-  response.json(latestCrawl ?? { pages: [], responses: [], errors: [], startUrl: siteUrl, limitReached: false });
+  response.json(latestCrawl ?? { pages: [], responses: [], errors: [], startUrl: testConfiguration.selectedSite?.url, limitReached: false });
 });
 
 app.get("/api/issues", (_request, response) => {
   response.json(latestIssues);
 });
 
-app.delete("/api/results", (_request, response) => {
-  if (active()) {
+app.delete("/api/results", async (_request, response) => {
+  if (active() || configuring) {
     response.status(409).json({ error: "Wait for the current audit or crawl to finish before clearing results." });
     return;
   }
-  store.clearCurrent(siteUrl);
-  latestAudit = null;
-  latestCrawl = null;
-  latestIssues = [];
-  response.json({ message: "Workspace cleared. Saved runs, reviews and cost history were retained. Future runs start with fresh review decisions." });
+  configuring = true;
+  try {
+    const selection = latestAudit ? null : await testConfiguration.resolveSelection();
+    const url = latestAudit?.siteUrl ?? latestAudit?.crawl?.startUrl ?? selection?.site.url ?? testConfiguration.selectedSite?.url;
+    if (!url) throw new ConfigurationError('Choose an available website before clearing the workspace.');
+    store.clearCurrent(url, latestAudit?.configuration?.profileFingerprint ?? selection?.configuration.profileFingerprint);
+    latestAudit = null;
+    latestCrawl = null;
+    latestIssues = [];
+    response.json({ message: "Workspace cleared. Saved runs, reviews and cost history were retained. Future runs start with fresh review decisions." });
+  } finally { configuring = false; }
 });
 
 app.patch(['/api/issues/:id/status', '/api/audits/:runId/issues/:id/status'], (request, response) => {
@@ -174,20 +209,16 @@ app.patch(['/api/issues/:id/status', '/api/audits/:runId/issues/:id/status'], (r
   response.json(issue);
 });
 
-app.post("/api/crawl", async (_request, response) => {
-  if (active()) {
-    response.status(409).json({ error: "An audit or crawl is already running." });
-    return;
-  }
-  const previousStatuses = new Map(store.reviewIssues(siteUrl).map(issue => [issue.id, issue.status]));
-  const audit = beginRun('crawl');
+app.post("/api/crawl", async (request, response) => {
+  const { run: audit, selected } = await beginRun('crawl', request.body?.configurationRevision);
+  const previousStatuses = new Map(store.reviewIssues(selected.site.url).map(issue => [issue.id, issue.status]));
   audit.phase = 'Crawling pages and checking links';
   audit.workers = [{ id: 'links', agent: 'links', categories: ['links'], status: 'running', attempts: 1,
     durationMs: 0, issueCount: 0, inputTokens: 0, outputTokens: 0, modelCalls: 0, estimatedCostUsd: 0, usageComplete: true,
     startedAt: audit.startedAt }];
   checkpoint(audit); crawling = true;
   try {
-    latestCrawl = audit.crawl = await crawlSite(siteUrl);
+    latestCrawl = audit.crawl = await crawlSite(selected.site.url);
     latestIssues = audit.issues = checkBrokenLinks(latestCrawl);
     for (const issue of latestIssues) {
       const previousStatus = previousStatuses.get(issue.id);
@@ -233,6 +264,8 @@ app.post("/api/test-model", async (_request, response) => {
 });
 
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
+  if (error instanceof ConfigurationError) { response.status(error.status).json({ error: error.message }); return; }
+  if ((error as { type?: string })?.type === 'entity.too.large') { response.status(413).json({ error: 'The upload is too large. Use a profile up to 64 KB and reference files totalling no more than 6 MB.' }); return; }
   console.error('API request failed:', error);
   response.status(500).json({ error: 'Could not complete the request. Check server logs and storage permissions.' });
 });

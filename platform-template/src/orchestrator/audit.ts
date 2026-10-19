@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { crawlSite, type CrawlResult } from "../crawler/crawl.js";
-import { loadProfile, loadIssueValidator } from "../config.js";
+import { loadProfile, loadIssueValidator, type Profile } from "../config.js";
 import { categories, type QaIssue } from "../issues.js";
 import { linksAgent } from "../agents/links.js";
 import { collectRenderedPages } from "../crawler/rendered.js";
@@ -37,6 +37,7 @@ export type Audit = {
   pricing?: Pricing | null;
   cost?: ReturnType<typeof runCost>;
   browserCoverage?: Array<{ pageUrl: string; status: string; states: number; limitations: string[] }>;
+  configuration?: { siteId: string; siteName: string; profileId: string; profileName: string; profileFingerprint?: string };
 };
 export function createAudit(): Audit {
   return {
@@ -44,12 +45,12 @@ export function createAudit(): Audit {
     workers: [], issues: [], coverage: categories.map(category => ({ category, implemented: agents.some(agent => agent.categories.includes(category)) })),
   };
 }
-export async function executeAudit(audit: Audit, siteUrl: string, model: string, previous: QaIssue[], checkpoint = () => {}) {
+export async function executeAudit(audit: Audit, siteUrl: string, model: string, previous: QaIssue[], checkpoint = () => {}, inputs?: { profile: Profile; referenceContentPath: string }) {
   const started = Date.now();
   audit.siteUrl = siteUrl; audit.model = model;
   audit.pricing = configuredPricing(model);
   try {
-    const profile = await loadProfile();
+    const profile = inputs?.profile ?? await loadProfile();
     const validateIssue = await loadIssueValidator();
     audit.targetLocale = profile.locale.target_locale;
     audit.phase = "Crawling site";
@@ -97,7 +98,7 @@ export async function executeAudit(audit: Audit, siteUrl: string, model: string,
           }
         };
         try {
-          const issues = await executeWithRenderedChecks(agent, { crawl, page, profile, model, report });
+          const issues = await executeWithRenderedChecks(agent, { crawl, page, profile, model, report, referenceContentPath: inputs?.referenceContentPath });
           accept(issues);
           // Agents can explicitly skip when their optional profile rules are absent.
           if ((report as WorkerRun).status !== "skipped") report.status = "completed";

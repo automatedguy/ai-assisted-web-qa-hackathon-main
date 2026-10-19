@@ -93,6 +93,7 @@ header .badge{color:var(--ink)}:focus-visible{outline:3px solid var(--accent);ou
 ${incomplete ? '<p class="warning">This run has incomplete coverage. Its findings are retained, but an absence of findings does not mean every check passed.</p>' : ''}
 ${run.error ? `<p class="warning">${text(run.error)}</p>` : ''}
 ${fields([['Run ID', run.id], ['Started (UTC)', run.startedAt], ['Finished (UTC)', run.finishedAt || 'Not recorded'], ['Report generated (UTC)', exportedAt],
+  ['Site configuration', run.configuration?.siteName], ['Linguistic asset', run.configuration?.profileName],
   ['Target locale', run.targetLocale || 'Not recorded'], ['Model', run.model || (run.kind === 'crawl' ? 'No model calls' : 'Not recorded')], ['Estimated cost', costLabel(cost)],
   ['Review statuses', ['new', 'verified', 'dismissed', 'escalated'].map(status => `${run.issues.filter(issue => issue.status === status).length} ${status}`).join(' · ')]])}
 <p class="muted">Review statuses reflect the time of export. Verified confirms a finding, not a fix. Costs use recorded/default rates, not temporary calculator overrides.</p></section>

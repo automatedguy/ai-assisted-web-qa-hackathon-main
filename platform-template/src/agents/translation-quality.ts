@@ -10,7 +10,7 @@ export const translationQualityAgent: Agent = {
     const { page, profile, report, crawl } = context;
     if (!page) throw new Error("Translation Quality agent requires a page.");
     report.attempts = 0; report.estimatedCostUsd = 0;
-    const source = await loadReference(page.url, crawl.startUrl, profile);
+    const source = await loadReference(page.url, crawl.startUrl, profile, context.referenceContentPath);
     if (!source) {
       report.status = "skipped";
       report.message = "No reference_content mapping for this page; translation quality was not checked.";

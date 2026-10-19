@@ -14,7 +14,7 @@ function canonicalUrl(value: string, baseUrl: string): string {
   return url.href;
 }
 
-async function referenceRoot(): Promise<string> {
+export async function referenceRoot(): Promise<string> {
   if (process.env.REFERENCE_CONTENT_PATH?.trim()) return resolve(process.env.REFERENCE_CONTENT_PATH);
   // The demo contract mounts this directory even when only the two required env vars are supplied.
   try { await stat("/data/reference-content"); return "/data/reference-content"; }
@@ -29,7 +29,7 @@ function contained(root: string, file: string): boolean {
   return path !== "" && path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path);
 }
 
-export async function loadReference(pageUrl: string, startUrl: string, profile: Profile): Promise<{ path: string; text: string } | null> {
+export async function loadReference(pageUrl: string, startUrl: string, profile: Profile, referenceContentPath?: string): Promise<{ path: string; text: string } | null> {
   const matches = (profile.reference_content ?? []).filter(entry =>
     canonicalUrl(entry.page, startUrl) === canonicalUrl(pageUrl, startUrl));
   if (!matches.length) return null;
@@ -39,7 +39,7 @@ export async function loadReference(pageUrl: string, startUrl: string, profile: 
     throw new Error("Reference source must be a nonempty Markdown file path (.md or .markdown).");
   }
   try {
-    const configuredRoot = await referenceRoot();
+    const configuredRoot = referenceContentPath ? resolve(referenceContentPath) : await referenceRoot();
     const root = await realpath(configuredRoot);
     // Accept the starter's repository-relative prefix and paths relative to the reference directory.
     const file = resolve(configuredRoot, path.replace(/^reference-content\//, ""));

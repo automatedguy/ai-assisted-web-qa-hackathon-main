@@ -1,6 +1,7 @@
 import { createActivityView, categoryNames } from './activity.js';
 import { createIssuesView } from './issues-view.js';
 import { createHistoryView } from './history-view.js';
+import { createConfigurationView } from './configuration-view.js';
 const $ = selector => document.querySelector(selector);
 const auditButton = $('#audit');
 const crawlButton = $('#crawl');
@@ -26,6 +27,10 @@ let serverActive = false;
 let operationBusy = false;
 let selectionLoading = false;
 let exportBusy = false;
+const configuration = createConfigurationView(document, api, () => { busy(auditActive); renderIssues(); }, async () => {
+  viewVersion++; clearTimeout(pollTimer); selectedRunId = null; serverActive = false;
+  renderEmpty(); await pollAudit();
+});
 const history = createHistoryView(document, api, id => {
   selectedRunId = id; viewVersion++; clearTimeout(pollTimer);
   $('#export-status').textContent = '';
@@ -53,12 +58,14 @@ async function api(url, options) {
 }
 function busy(value) {
   auditActive = value;
-  for (const button of [auditButton, crawlButton, clearButton]) button.disabled = value || reviewBusy || selectionLoading || exportBusy;
+  for (const button of [auditButton, crawlButton, clearButton]) button.disabled = value || reviewBusy || selectionLoading || exportBusy || configuration.busy;
+  auditButton.disabled ||= !configuration.ready; crawlButton.disabled ||= !configuration.ready;
+  configuration.setBusy(value || reviewBusy || selectionLoading || exportBusy || operationBusy);
   // Clearing always targets the current workspace, never an archived run.
   clearButton.disabled ||= Boolean(selectedRunId);
-  history.setBusy(reviewBusy || operationBusy || selectionLoading || exportBusy);
+  history.setBusy(reviewBusy || operationBusy || selectionLoading || exportBusy || configuration.busy);
   const exportDisabled = !displayedRun || displayedRunVersion !== viewVersion || displayedRun.status === 'running' || Boolean(displayedRun.persistenceError) ||
-    reviewBusy || operationBusy || selectionLoading || exportBusy;
+    reviewBusy || operationBusy || selectionLoading || exportBusy || configuration.busy;
   exportButton.disabled = exportFormat.disabled = exportDisabled;
   exportButton.title = !displayedRun ? 'Run a check or select a saved run to export.' : displayedRun.status === 'running' ?
     'Wait for this run to finish before exporting.' : 'Download all results from the displayed run.';
@@ -157,7 +164,7 @@ function renderCrawl(crawl, durationMs) {
 function renderIssues() {
   $('#findings-detail').hidden = selectedCategory === 'all' || issues.length === 0;
   $('#issues-heading').textContent = selectedCategory === 'all' ? 'All findings' : `${categoryNames[selectedCategory] || selectedCategory} findings`;
-  issuesView.render(issues, { category: selectedCategory, disabled: auditActive || reviewBusy || selectionLoading || exportBusy, pageTitles });
+  issuesView.render(issues, { category: selectedCategory, disabled: auditActive || reviewBusy || selectionLoading || exportBusy || configuration.busy, pageTitles });
 }
 function renderAudit(audit) {
   displayedRun = audit;
@@ -198,7 +205,7 @@ auditButton.addEventListener('click', async () => {
   viewVersion++; clearTimeout(pollTimer);
   operationBusy = true; selectedRunId = null;
   busy(true); renderIssues(); $('#message').textContent = '';
-  try { renderAudit(await api('/api/audits', { method: 'POST' })); await pollAudit(); }
+  try { renderAudit(await api('/api/audits', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(configuration.payload()) })); await pollAudit(); }
   catch (error) { $('#message').textContent = error.message; busy(false); await pollAudit(); }
   finally { operationBusy = false; busy(auditActive); }
 });
@@ -221,7 +228,7 @@ crawlButton.addEventListener('click', async () => {
   renderCategoryCards();
   renderIssues();
   try {
-    const crawl = await api('/api/crawl', { method: 'POST' }); issues = crawl.issues;
+    const crawl = await api('/api/crawl', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(configuration.payload()) }); issues = crawl.issues;
     await pollAudit();
     $('#message').textContent = `Link check finished: ${issues.length} ${issues.length === 1 ? 'finding' : 'findings'}. See Findings below.`;
   } catch (error) {
@@ -286,3 +293,4 @@ api('/api/health').then(data => {
   $('#status').textContent = 'Server ready · ' + (data.apiKeyConfigured ? 'API key configured' : 'API key missing') + ' · Model: ' + data.model;
 }).catch(error => { $('#status').textContent = error.message; });
 void pollAudit();
+void configuration.refresh();

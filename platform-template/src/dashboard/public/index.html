@@ -16,6 +16,35 @@
   </div>
 </header>
 <main>
+  <section id="test-configuration" aria-labelledby="configuration-heading">
+    <h2 id="configuration-heading">Test configuration</h2>
+    <form id="configuration-form" class="configuration-controls">
+      <label for="test-site">Site under test<select id="test-site" disabled></select></label>
+      <label for="test-profile">Linguistic asset<select id="test-profile" disabled></select></label>
+      <button id="configuration-apply" type="submit" disabled>Apply selection</button>
+      <button id="configuration-reload" type="button">Reload choices</button>
+    </form>
+    <p id="configuration-current" aria-live="polite">Loading test configuration…</p>
+    <p id="configuration-detail" class="activity-muted"></p>
+    <p class="activity-muted">Apply the site and its matching asset before running checks. Switching clears the current view and keeps saved history.</p>
+    <details><summary>Add a website</summary>
+      <form id="site-form" class="configuration-controls">
+        <label for="site-name">Name (optional)<input id="site-name" maxlength="120" placeholder="Customer staging"></label>
+        <label for="site-url">Website URL<input id="site-url" type="url" required maxlength="2048" placeholder="https://staging.example.com"></label>
+        <button type="submit">Add website</button>
+      </form>
+    </details>
+    <details><summary>Add a linguistic asset</summary>
+      <form id="profile-form" class="configuration-controls">
+        <label for="profile-name">Name (optional)<input id="profile-name" maxlength="120" placeholder="French brand profile"></label>
+        <label for="profile-file">YAML profile<input id="profile-file" type="file" accept=".yaml,.yml" required></label>
+        <label for="profile-references">Reference folder (optional)<input id="profile-references" type="file" webkitdirectory multiple></label>
+        <button type="submit">Add linguistic asset</button>
+      </form>
+      <p class="activity-muted">Choose the reference-content folder if the YAML maps pages to source Markdown. File paths in the YAML must be relative to that folder. Uploaded assets are saved for future runs.</p>
+    </details>
+    <p id="configuration-message" role="status"></p>
+  </section>
   <div class="audit-actions" role="group" aria-label="Audit actions">
     <button id="audit" type="button">Run audit</button>
     <button id="crawl" type="button">Crawl and check links only</button>

@@ -90,6 +90,11 @@ test('brand and terminology workflow with alternate profiles and a local model',
       assert(received!.rules.some(rule => rule.id === 'brand_voice.forbidden_terms' || rule.id === 'glossary.banned_terms'));
       assert.deepEqual(audit.issues.map(issue => issue.category).sort(), ['brand_voice', 'brand_voice', 'brand_voice', 'terminology', 'terminology', 'terminology']);
       assert.equal(audit.issues.find(issue => issue.evidence === 'stockage nuage')!.suggested_fix, 'Use “stockage en ligne”.');
+      assert.deepEqual(audit.issues.find(issue => issue.evidence === 'stockage nuage')!.assessment, {
+        method: 'model_text', rule: { id: 'glossary.preferred_terms', value: '{"cloud storage":"stockage en ligne"}' },
+      });
+      assert(terminologyWorker(audit).rules?.some(rule => rule.id === 'glossary.preferred_terms'));
+      assert(terminologyWorker(audit).startedAt); assert(terminologyWorker(audit).finishedAt);
       assert(audit.issues.every(issue => audit.crawl!.pages[0].text.includes(issue.evidence)));
       const reviewed = audit.issues.find(issue => issue.evidence === 'nul')!; reviewed.status = 'dismissed';
       findings = findings.map(issue => ({ ...issue, description: 'Reworded explanation.' }));

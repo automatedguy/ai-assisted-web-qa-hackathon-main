@@ -98,6 +98,7 @@ test('media workflow fetches assets, submits image bytes and validates evidence'
       assert.equal(received.targetLocale, 'fr-FR'); assert.equal(received.assets.find((asset: any) => asset.id === 'track-1-1').captionText, 'Welcome to our team.');
       assert.equal(videoRange, 'bytes=0-4095'); assert.equal(fetched.filter(path => path === '/ok.png').length, 1);
       assert.equal(audit.issues.length, 3); assert(audit.issues.every(issue => issue.category === 'media'));
+      assert.deepEqual(audit.issues.map(issue => issue.assessment?.method), ['model_text', 'model_visual', 'model_text']);
       assert.equal(audit.issues[0].location.selector_or_xpath, '(//img)[1]');
       assert.match(audit.issues[1].evidence, /Visual observation \(model; review required\)/);
       assert.equal(audit.issues[2].location.element_type, 'video'); assert.match(audit.issues[2].evidence, /Caption cue text/);
@@ -117,6 +118,7 @@ test('media workflow fetches assets, submits image bytes and validates evidence'
       await setup('<img src="/missing.png"><img src="/fake.png" alt=""><video src="/missing.mp4"><track src="/missing.vtt" srclang="fr"><track src="/bad.vtt" srclang="fr"></video>');
       const audit = await run(); assert.equal(worker(audit).status, 'completed'); assert.equal(mediaCalls, 0);
       assert.equal(audit.issues.length, 6); assert(audit.issues.every(issue => issue.category === 'media'));
+      assert(audit.issues.every(issue => issue.assessment?.method === 'deterministic'));
       assert(audit.issues.some(issue => issue.description.includes('alt attribute')));
       assert(audit.issues.some(issue => issue.description.includes('WebVTT')));
     });

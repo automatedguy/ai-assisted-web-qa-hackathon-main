@@ -43,6 +43,17 @@
         "note": { "type": "string" }
       }
     },
+    "assessment": {
+      "type": "object",
+      "required": ["method"],
+      "properties": {
+        "method": { "enum": ["deterministic", "model_text", "model_visual"] },
+        "rule": {
+          "type": "object", "required": ["id", "value"],
+          "properties": { "id": { "type": "string" }, "value": { "type": "string" } }
+        }
+      }
+    },
     "description": { "type": "string" },
     "evidence": { "type": "string" },
     "expected": { "type": "string" },

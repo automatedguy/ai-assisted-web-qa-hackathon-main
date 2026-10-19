@@ -50,7 +50,9 @@ function makeAgent(id: "brand-voice" | "terminology", category: Rule["category"]
         if (!rule) throw new Error(`${name} finding references an unconfigured rule.`);
         const issueId = `${id}-` + createHash("sha256").update(`${page.url}\n${finding.evidence}`).digest("hex").slice(0, 16);
         const { rule: _rule, ...details } = finding;
-        if (!issues.has(issueId)) issues.set(issueId, { ...details, id: issueId, category: rule.category, location: { page_url: page.url, element_type: "text" }, status: "new" });
+        if (!issues.has(issueId)) issues.set(issueId, { ...details, id: issueId, category: rule.category,
+          assessment: { method: "model_text", rule: { id: rule.id, value: typeof rule.value === "string" ? rule.value : JSON.stringify(rule.value) } },
+          location: { page_url: page.url, element_type: "text" }, status: "new" });
       }
       return [...issues.values()];
     },

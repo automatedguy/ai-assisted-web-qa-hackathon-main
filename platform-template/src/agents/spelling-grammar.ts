@@ -21,6 +21,7 @@ Write descriptions and explanations in English; preserve evidence and corrected 
       // Retain existing finding IDs so matching review decisions survive the rename.
       id: "language-" + createHash("sha256").update(page.url + "\n" + issue.evidence).digest("hex").slice(0, 16),
       category: "spelling_grammar" as const,
+      assessment: { method: "model_text" as const },
       location: { page_url: page.url, element_type: "text" as const }, status: "new" as const,
     }));
   },

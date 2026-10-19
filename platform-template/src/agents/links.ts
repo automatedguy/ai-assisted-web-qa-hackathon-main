@@ -31,6 +31,7 @@ export function checkBrokenLinks(crawl: CrawlResult): QaIssue[] {
       issues.push({
         id: `link-${digest}`,
         category: "links",
+        assessment: { method: "deterministic" },
         severity: "major",
         location: { page_url: page.url, element_type: "link", selector_or_xpath: link.selector },
         description: `The link destination returned HTTP ${status}.`,

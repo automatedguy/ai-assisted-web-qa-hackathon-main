@@ -47,6 +47,7 @@ Write description and all explanatory prose in English. expected and suggested_f
       const targetLabel = kind === "omission" ? "Target insertion anchor (omitted meaning is absent)" : "Target";
       if (!issues.has(id)) issues.set(id, {
         ...details, id, category: "translation_quality",
+        assessment: { method: "model_text" },
         evidence: `${sourceLabel} (${source.path}): “${source_evidence}”\n${targetLabel}: “${finding.evidence}”`,
         location: { page_url: page.url, element_type: "text" }, status: "new",
       });

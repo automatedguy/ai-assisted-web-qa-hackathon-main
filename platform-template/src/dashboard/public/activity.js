@@ -1,3 +1,5 @@
+import { agentCatalog, createAgentCards, needsAttention } from './activity-cards.js';
+
 export const categoryNames = {
   spelling_grammar: 'Spelling and grammar', formatting: 'Formatting', links: 'Links',
   locale_rules: 'Locale rules', brand_voice: 'Brand voice', translation_quality: 'Translation quality',
@@ -71,20 +73,32 @@ export function activitySummary(run) {
   };
 }
 
-export function createActivityView(document) {
+export function createActivityView(document, onViewFindings = () => {}) {
   const $ = selector => document.querySelector(selector);
   const panel = $('#activity-panel');
   const trigger = $('#view-activity');
   trigger.addEventListener('click', () => { panel.showModal(); trigger.setAttribute('aria-expanded', 'true'); });
   $('#close-activity').addEventListener('click', () => panel.close());
-  panel.addEventListener('close', () => { trigger.setAttribute('aria-expanded', 'false'); trigger.focus(); });
+  let selectedFindings;
+  panel.addEventListener('close', () => {
+    trigger.setAttribute('aria-expanded', 'false');
+    if (selectedFindings) { const category = selectedFindings; selectedFindings = undefined; onViewFindings(category); }
+    else trigger.focus();
+  });
+  const cards = createAgentCards(document, category => { selectedFindings = category; panel.close(); });
   let currentId;
   let previousWorkers = new Map();
   let previousPhase;
   let previousStatus;
   let events = [];
   const setText = (selector, text) => { if ($(selector).textContent !== text) $(selector).textContent = text; };
-  const event = text => events.push({ text, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) });
+  const event = (text, worker, attention = false) => events.push({ text, categories: worker?.categories || [],
+    attention: attention || Boolean(worker && needsAttention(worker)),
+    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) });
+  for (const agent of agentCatalog) {
+    const option = document.createElement('option'); option.value = agent.category; option.textContent = agent.name;
+    $('#timeline-agent').append(option);
+  }
   // Keep disclosure controls and the panel scroll position stable during polling.
   const updateList = (selector, lines) => {
     const list = $(selector);
@@ -95,6 +109,21 @@ export function createActivityView(document) {
     });
     while (list.children.length > lines.length) list.lastElementChild.remove();
   };
+  const renderTimeline = () => {
+    const category = $('#timeline-agent').value;
+    const attentionOnly = $('#timeline-kind').value === 'attention';
+    const visible = events.filter(entry => (category === 'all' || entry.categories.includes(category)) && (!attentionOnly || entry.attention));
+    updateList('#activity-events', visible.map(entry => `${entry.time} — ${entry.text}`));
+    $('#events-empty').hidden = visible.length > 0;
+    setText('#events-empty', events.length ? 'No updates match these filters.' : 'No activity yet.');
+    $('#timeline-latest').disabled = !visible.length;
+  };
+  $('#timeline-agent').addEventListener('change', renderTimeline);
+  $('#timeline-kind').addEventListener('change', renderTimeline);
+  $('#timeline-latest').addEventListener('click', () => {
+    const last = $('#activity-events').lastElementChild;
+    if (last) { last.tabIndex = -1; last.focus({ preventScroll: true }); last.scrollIntoView({ block: 'nearest' }); }
+  });
   return {
     render(run) {
       const summary = activitySummary(run);
@@ -107,33 +136,38 @@ export function createActivityView(document) {
       setText('#activity-duration', Number.isFinite(duration) ? seconds(duration) : '');
       if (currentId !== run?.id || !run) {
         currentId = run?.id; previousWorkers = new Map(); previousPhase = undefined; previousStatus = undefined; events = [];
+        cards.reset();
+        $('#timeline-agent').value = 'all'; $('#timeline-kind').value = 'all';
       }
       if (run) {
         if (run.phase !== previousPhase && run.status === 'running') event(run.phase + '.');
         for (const worker of run.workers) {
-          const fingerprint = `${worker.status}:${worker.attempts}:${worker.message || ''}`;
-          if (previousWorkers.get(worker.id) !== fingerprint && worker.status !== 'queued') event(workerActivity(worker));
+          const fingerprint = `${worker.status}:${worker.attempts}:${worker.stage || ''}:${worker.message || ''}`;
+          if (previousWorkers.get(worker.id) !== fingerprint && worker.status !== 'queued') {
+            event(workerActivity(worker) + (worker.status === 'running' && worker.stage ? ' ' + worker.stage + '.' : ''), worker);
+          }
           previousWorkers.set(worker.id, fingerprint);
         }
-        if (run.status !== previousStatus && run.status !== 'running') event(summary.status + (summary.attention ? '. ' + summary.attention : '') + (summary.note ? '. ' + summary.note : ''));
+        if (run.status !== previousStatus && run.status !== 'running') event(summary.status + (summary.attention ? '. ' + summary.attention : '') + (summary.note ? '. ' + summary.note : ''), undefined, Boolean(summary.attention));
         previousPhase = run.phase; previousStatus = run.status;
       }
       events = events.slice(-60);
       // Oldest first; new updates append without moving the reader's scroll position.
-      updateList('#activity-events', events.map(entry => `${entry.time} — ${entry.text}`));
-      $('#events-empty').hidden = events.length > 0;
+      renderTimeline();
       const workers = run?.workers || [];
-      const agents = [...new Set(workers.map(worker => worker.agent))];
-      updateList('#agent-activity', agents.map(agent => {
-        const reports = workers.filter(worker => worker.agent === agent);
-        const counts = ['running', 'queued', 'completed', 'failed', 'partial', 'skipped', 'not applicable'].map(status => {
-          const total = reports.filter(worker => displayStatus(worker) === status).length;
-          return total ? `${total} ${status === 'queued' ? 'waiting' : status === 'partial' ? 'incomplete' : status}` : '';
-        }).filter(Boolean);
-        const active = reports.filter(worker => worker.status === 'running').map(pageOf);
-        return `${nameOf(reports[0])} — ${counts.join(' · ')}${active.length ? '\nReviewing ' + active.join(', ') : ''}`;
-      }));
-      $('#agents-empty').hidden = agents.length > 0;
+      cards.render(run);
+      $('#agents-empty').hidden = workers.length > 0;
+      const completed = workers.filter(w => w.status === 'completed').length;
+      const loadedPages = run?.crawl?.pages.filter(page => page.status >= 200 && page.status < 300).length || 0;
+      setText('#panel-metrics', run ? `${count(loadedPages, 'page')} loaded · ${completed}/${workers.length} checks completed · ${seconds(duration)}` : '');
+      setText('#panel-phase', run?.status === 'running' ? run.phase : run?.targetLocale ? 'Target locale: ' + run.targetLocale : '');
+      const attention = workers.filter(needsAttention).map(w => workerActivity(w));
+      if (run?.error) attention.unshift(run.error);
+      if (run?.crawl?.errors.length) attention.push(...run.crawl.errors.map(error => 'Crawl: ' + error.url + ' · ' + error.message));
+      if (run?.crawl?.limitReached) attention.push('Crawl limit reached. Some pages were not checked.');
+      if (summary.attention && !attention.length) attention.push(summary.attention);
+      updateList('#panel-attention-items', attention);
+      $('#panel-attention').hidden = !attention.length;
       updateList('#activity-coverage', summary.coverage.map(entry => `${entry.label} — ${entry.text}`));
       const input = workers.reduce((sum, worker) => sum + worker.inputTokens, 0);
       const output = workers.reduce((sum, worker) => sum + worker.outputTokens, 0);
@@ -141,13 +175,6 @@ export function createActivityView(document) {
       const cost = known ? '$' + workers.reduce((sum, worker) => sum + worker.estimatedCostUsd, 0).toFixed(5) : 'unavailable';
       setText('#activity-usage', run ? `Reported tokens: ${input} input / ${output} output · Estimated cost: ${cost}` +
         (workers.some(worker => !worker.usageComplete) ? ' · Some usage is unknown.' : '') : 'No usage yet.');
-      const technical = workers.map(worker => `${nameOf(worker)} · ${worker.pageUrl || 'site'}\n` +
-        `${displayStatus(worker)} · ${count(worker.attempts, 'attempt')} · Duration: ${seconds(worker.durationMs)} · ${count(worker.issueCount, 'finding')}\n` +
-        `Tokens: ${worker.inputTokens} in / ${worker.outputTokens} out · ${worker.model || 'No model reported'}\n` +
-        (worker.message || '') + (worker.mediaChecks?.length ? '\n' + worker.mediaChecks.map(check => `${check.check} · ${check.status} · ${check.asset} · ${check.message}`).join('\n') : ''));
-      if (run?.error) technical.unshift(run.error);
-      if (run?.crawl) technical.push(...run.crawl.errors.map(error => `Crawl failed: ${error.url} · ${error.message}`));
-      updateList('#activity-technical', technical);
     },
   };
 }

@@ -90,6 +90,12 @@ test('locale and formatting workflow with alternate profiles and a local model',
       assert.deepEqual(audit.issues.map(issue => issue.category).sort(), ['formatting', 'formatting', 'formatting', 'locale_rules', 'locale_rules']);
       assert(audit.issues.every(issue => audit.crawl!.pages[0].text.includes(issue.evidence)));
       assert.equal(audit.issues.find(issue => issue.evidence === '14/03/2026')?.expected, '2026-03-14');
+      assert.deepEqual(audit.issues.find(issue => issue.evidence === '14/03/2026')?.assessment, {
+        method: 'deterministic', rule: { id: 'date_format', value: 'YYYY-MM-DD' },
+      });
+      assert.deepEqual(audit.issues.find(issue => issue.evidence === '2 lb')?.assessment, {
+        method: 'model_text', rule: { id: 'measurement_units', value: 'metric' },
+      });
       audit.issues[0].status = 'verified'; const next = await run(audit.issues);
       assert.equal(next.issues.find(issue => issue.id === audit.issues[0].id)?.status, 'verified');
     });

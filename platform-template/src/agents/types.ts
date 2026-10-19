@@ -8,6 +8,8 @@ export type WorkerRun = {
   attempts: number; durationMs: number; issueCount: number;
   inputTokens: number; outputTokens: number; estimatedCostUsd: number | null;
   usageComplete: boolean; model?: string; message?: string;
+  startedAt?: string; finishedAt?: string; stage?: string;
+  rules?: Array<{ id: string; value: string }>;
   mediaChecks?: Array<{ asset: string; check: string; status: "completed" | "failed" | "skipped"; message: string }>;
 };
 export type AgentContext = {

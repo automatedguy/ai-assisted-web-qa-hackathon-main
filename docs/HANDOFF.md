@@ -57,12 +57,18 @@ Paths beginning with `src/` above are relative to `platform-template/`.
 `DELETE /api/results` clears the current run, crawl, findings and review decisions;
 it rejects requests while an audit or crawl is running.
 
-The activity panel replaces the worker table/category badges. It groups worker
-statuses by agent and shows the last 60 state changes observed by this browser tab.
+The activity panel has a fixed summary, prominent attention section and eight
+expandable agent cards with page outcomes, configured policy rules, limitations
+and per-agent diagnostics (including media checks). **Why this was flagged** shows
+evidence and decision summaries, not private model reasoning. New findings retain
+their check method and, for policy findings, the cited rule; new workers retain
+rule snapshots and execution timestamps. Older runs display without inventing
+missing metadata. **View findings** focuses the selected category outside the panel.
+The filterable timeline shows the last 60 updates observed by this browser tab.
 These are polling observations, not a persistent server event log; refresh rebuilds
 the view from the current snapshot. Skipped/failed checks and unrun categories stay
-visible in the main activity bar. Coverage and technical details (including media
-checks) expand inside the panel. No additional model calls are made.
+visible in the main activity bar. No additional model calls are made. Run
+`npm run test:activity-ui` in `platform-template/` for mocked desktop/mobile browser checks.
 
 The Spelling & Grammar agent uses the profile's target locale and glossary, one request per
 successful HTML page. It has a 60-second request timeout and one retry for transient

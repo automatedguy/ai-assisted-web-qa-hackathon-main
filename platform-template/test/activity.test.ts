@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { activitySummary, workerActivity, categoryNames } from '../src/dashboard/public/activity.js';
+import { agentCardData, agentCatalog, needsAttention } from '../src/dashboard/public/activity-cards.js';
 
 const worker = (overrides = {}) => ({
   id: 'spelling-grammar-home', agent: 'spelling-grammar', categories: ['spelling_grammar'], status: 'completed',
@@ -8,6 +9,23 @@ const worker = (overrides = {}) => ({
 });
 const run = (overrides = {}) => ({
   id: 'example', status: 'completed', phase: 'Finished', issues: [], workers: [worker()], ...overrides,
+});
+
+test('agent cards distinguish completed checks, failures and non-applicable media', () => {
+  const media = agentCatalog.find(agent => agent.id === 'media')!;
+  const reports = [
+    worker({ id: 'ok', agent: 'media', categories: ['media'], issueCount: 1 }),
+    worker({ id: 'failed', agent: 'media', categories: ['media'], status: 'failed' }),
+    worker({ id: 'empty', agent: 'media', categories: ['media'], status: 'skipped', message: 'No image or video elements found.' }),
+  ];
+  const data = agentCardData(run({ workers: reports, issues: [{ category: 'media' }, { category: 'links' }] }), media);
+  assert.equal(data.state, 'Needs attention');
+  assert.equal(data.completed, 1); assert.equal(data.failed, 1);
+  assert.equal(data.notApplicable, 1); assert.equal(data.skipped, 0); assert.equal(data.findings.length, 1);
+  assert.equal(needsAttention(reports[2]), false);
+  assert.equal(agentCardData(run({ workers: [] }), media).state, 'Not run');
+  assert.equal(agentCardData(run({ workers: [], status: 'running' }), media).state, 'Waiting for dispatch');
+  assert.equal(agentCardData(run({ workers: [], kind: 'crawl', status: 'running' }), media).state, 'Not run');
 });
 
 test('activity distinguishes available categories from checks that actually ran', () => {

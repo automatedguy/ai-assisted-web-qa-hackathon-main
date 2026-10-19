@@ -21,6 +21,10 @@ export type QaIssue = {
     note?: string;
   };
   description: string;
+  assessment?: {
+    method: "deterministic" | "model_text" | "model_visual";
+    rule?: { id: string; value: string };
+  };
   evidence: string;
   expected?: string;
   confidence: number;

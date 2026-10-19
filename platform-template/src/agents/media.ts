@@ -17,6 +17,7 @@ export const mediaAgent: Agent = {
     const { page, profile, report } = context;
     if (!page) throw new Error("Media agent requires a page.");
     report.attempts = 0; report.estimatedCostUsd = 0; report.mediaChecks = [];
+    report.stage = "Inspecting media resources";
     if (!page.images.length && !page.videos.length) {
       report.status = "skipped"; report.message = "No image or video elements found."; return [];
     }
@@ -28,6 +29,8 @@ export const mediaAgent: Agent = {
       expected: string, suggested_fix: string, severity: QaIssue["severity"] = "minor", confidence = 1) => {
       const id = "media-" + createHash("sha256").update(JSON.stringify([page.url, asset.selector, check === "alt_language" ? "" : asset.src, check, evidence])).digest("hex").slice(0, 16);
       if (!issues.some(issue => issue.id === id)) issues.push({ id, category: "media", severity, description,
+        assessment: { method: ["image_content", "image_text"].includes(check) ? "model_visual" :
+          ["alt_language", "caption_language"].includes(check) ? "model_text" : "deterministic" },
         evidence: `${asset.selector} · ${asset.src || "(missing URL)"}\n${evidence}`, expected, suggested_fix, confidence,
         location: { page_url: page.url, element_type: asset.elementType, selector_or_xpath: asset.selector }, status: "new" });
     };

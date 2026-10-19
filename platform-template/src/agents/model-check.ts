@@ -67,6 +67,7 @@ export async function requestFindings({ page, model, report }: AgentContext, opt
   const outputRate = rate("OPENAI_OUTPUT_USD_PER_MILLION");
   for (let attempt = 1; attempt <= 2; attempt++) {
     report.attempts = attempt;
+    report.stage = "Reviewing content with model";
     let result;
     try {
       result = await client.responses.create({
@@ -85,7 +86,7 @@ export async function requestFindings({ page, model, report }: AgentContext, opt
       const status = error instanceof OpenAI.APIError ? error.status : undefined;
       report.usageComplete = false;
       const retryable = status === 429 || (status !== undefined && status >= 500) || error instanceof OpenAI.APIConnectionError;
-      if (retryable && attempt < 2) { await delay(1000); continue; }
+      if (retryable && attempt < 2) { report.stage = "Waiting to retry"; await delay(1000); continue; }
       throw new Error(status ? `OpenAI request failed (HTTP ${status}). Check model access, quota, and API configuration.` : "OpenAI request failed or timed out.");
     }
     if (result.usage) {
@@ -95,6 +96,7 @@ export async function requestFindings({ page, model, report }: AgentContext, opt
     if (inputRate !== null && outputRate !== null && report.usageComplete) {
       report.estimatedCostUsd = (report.inputTokens * inputRate + report.outputTokens * outputRate) / 1e6;
     }
+    report.stage = "Validating response and evidence";
     if (result.status !== "completed") throw new Error("Model response incomplete; no findings accepted.");
     let parsed: unknown;
     try { parsed = JSON.parse(result.output_text); }

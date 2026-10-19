@@ -4,8 +4,8 @@ import { loadProfile, loadIssueValidator } from "../config.js";
 import { categories, type QaIssue } from "../issues.js";
 import { checkBrokenLinks } from "../agents/links.js";
 import { spellingGrammarAgent } from "../agents/spelling-grammar.js";
-import { localeAgent, formattingAgent } from "../agents/locale-formatting.js";
-import { brandVoiceAgent, terminologyAgent } from "../agents/brand-terminology.js";
+import { localeAgent, formattingAgent, localeRules, formattingRules } from "../agents/locale-formatting.js";
+import { brandVoiceAgent, terminologyAgent, brandVoiceRules, terminologyRules } from "../agents/brand-terminology.js";
 import { translationQualityAgent } from "../agents/translation-quality.js";
 import { mediaAgent } from "../agents/media.js";
 import { WorkerFailure } from "../agents/types.js";
@@ -46,16 +46,25 @@ export async function executeAudit(audit: Audit, siteUrl: string, model: string,
     const pages = crawl.pages.filter(page => page.status >= 200 && page.status < 300);
     if (!pages.length) throw new Error("No successful HTML pages were available to audit.");
     audit.phase = "Running workers";
+    const policyRules = {
+      locale: localeRules(profile), formatting: formattingRules(profile),
+      "brand-voice": brandVoiceRules(profile), terminology: terminologyRules(profile),
+    };
     const tasks = agents.flatMap(agent => (agent.scope === "site" ? [undefined] : pages.filter(page => agent.includeEmptyPages || page.text.trim())).map(page => {
       const report: WorkerRun = {
         id: randomUUID(), agent: agent.id, categories: agent.categories, pageUrl: page?.url,
         status: "queued", attempts: 0, durationMs: 0, issueCount: 0,
         inputTokens: 0, outputTokens: 0, estimatedCostUsd: agent.id === "links" ? 0 : null, usageComplete: true,
+        rules: (policyRules[agent.id as keyof typeof policyRules] ?? []).map(rule => ({
+          id: rule.id, value: typeof rule.value === "string" ? rule.value : JSON.stringify(rule.value),
+        })),
       };
       audit.workers.push(report);
       return async () => {
         const workerStart = Date.now();
         report.status = "running"; report.attempts = 1;
+        report.startedAt = new Date().toISOString();
+        report.stage = agent.id === "links" ? "Checking HTTP responses" : "Preparing checks";
         const accept = (issues: QaIssue[]) => {
           if (issues.some(issue => !validateIssue(issue) || !agent.categories.includes(issue.category))) throw new Error("Worker findings failed issue schema validation.");
           for (const issue of issues) {
@@ -78,6 +87,7 @@ export async function executeAudit(audit: Audit, siteUrl: string, model: string,
             catch { report.message = "Worker findings failed issue schema validation."; }
           }
         } finally {
+          report.finishedAt = new Date().toISOString();
           report.durationMs = Date.now() - workerStart;
           console.log(JSON.stringify({ event: "worker_finished", auditId: audit.id, ...report }));
         }

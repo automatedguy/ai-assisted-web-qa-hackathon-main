@@ -38,7 +38,9 @@ function findingsToIssues(pageUrl: string, findings: Findings["issues"], rules: 
     if (seen.has(id)) continue;
     seen.add(id);
     const { rule: _rule, ...details } = finding;
-    issues.push({ ...details, id, category: rule.category, location: { page_url: pageUrl, element_type: "text" }, status: "new" });
+    issues.push({ ...details, id, category: rule.category,
+      assessment: { method: "model_text", rule: { id: rule.id, value: typeof rule.value === "string" ? rule.value : JSON.stringify(rule.value) } },
+      location: { page_url: pageUrl, element_type: "text" }, status: "new" });
   }
   return issues;
 }

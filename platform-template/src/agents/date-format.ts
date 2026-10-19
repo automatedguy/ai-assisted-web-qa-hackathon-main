@@ -45,6 +45,7 @@ export function checkDateFormat(text: string, pageUrl: string, format: unknown) 
       id: issueId(pageUrl, "date_format", evidence), category: "formatting", severity: "minor",
       location: { page_url: pageUrl, element_type: "text" },
       description: `The date does not follow the configured ${format} calendar-date format.`,
+      assessment: { method: "deterministic", rule: { id: "date_format", value: format } },
       evidence, expected, confidence: 1, status: "new",
       suggested_fix: corrections.length === 1 ? `Use ${expected}.` : `Confirm the intended date and write it as ${format}.`,
     });

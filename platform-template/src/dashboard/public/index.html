@@ -57,19 +57,30 @@
 </main>
 <dialog id="activity-panel" aria-labelledby="activity-heading">
   <header class="activity-panel-header">
-    <div><h2 id="activity-heading">Agent activity</h2><p id="panel-status">Ready to check your site</p></div>
+    <div><h2 id="activity-heading">Agent activity</h2><p id="panel-status">Ready to check your site</p><p id="panel-metrics"></p><p id="panel-phase"></p></div>
     <button id="close-activity" type="button" autofocus>Close <span aria-hidden="true">×</span></button>
   </header>
   <div class="activity-panel-body">
+    <section id="panel-attention" class="panel-attention" aria-labelledby="panel-attention-heading" hidden>
+      <h3 id="panel-attention-heading">Needs attention</h3>
+      <ul id="panel-attention-items" class="activity-list"></ul>
+    </section>
     <h3>Agents</h3>
-    <p id="agents-empty" class="activity-muted">Agent updates will appear when checks start.</p>
-    <ul id="agent-activity" class="activity-list"></ul>
-    <h3>Recent updates</h3>
-    <p class="activity-muted">Updates observed while this page is open. Latest updates appear at the bottom.</p>
-    <p id="events-empty" class="activity-muted">No activity yet.</p>
-    <ol id="activity-events" class="activity-list activity-events"></ol>
+    <p id="agents-empty" class="activity-muted">Expand an agent to see its scope. Run an audit to see page checks and explanations.</p>
+    <ul id="agent-activity" class="agent-cards"></ul>
+    <details class="activity-disclosure" id="activity-timeline">
+      <summary>Timeline</summary>
+      <p class="activity-muted">Last 60 updates observed in this tab. Times show when updates were received; refresh rebuilds the list from the current snapshot.</p>
+      <div class="timeline-controls">
+        <label>Agent<select id="timeline-agent"><option value="all">All agents</option></select></label>
+        <label>Updates<select id="timeline-kind"><option value="all">All updates</option><option value="attention">Needs attention</option></select></label>
+        <button type="button" id="timeline-latest">Jump to latest</button>
+      </div>
+      <p id="events-empty" class="activity-muted">No activity yet.</p>
+      <ol id="activity-events" class="activity-list activity-events"></ol>
+    </details>
     <details class="activity-disclosure"><summary>Check coverage</summary><ul id="activity-coverage" class="activity-list"></ul></details>
-    <details class="activity-disclosure"><summary>Technical details</summary><p id="activity-usage">No usage yet.</p><ul id="activity-technical" class="activity-list"></ul></details>
+    <details class="activity-disclosure"><summary>Run usage</summary><p id="activity-usage">No usage yet.</p></details>
   </div>
 </dialog>
 </body></html>

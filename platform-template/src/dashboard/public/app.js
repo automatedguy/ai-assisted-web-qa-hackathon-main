@@ -4,7 +4,11 @@ const $ = selector => document.querySelector(selector);
 const auditButton = $('#audit');
 const crawlButton = $('#crawl');
 const clearButton = $('#clear');
-const activity = createActivityView(document);
+const activity = createActivityView(document, category => {
+  showCategory(category);
+  $('#issues-heading').setAttribute('tabindex', '-1');
+  $('#issues-heading').focus({ preventScroll: true });
+});
 let crawlRun;
 let issues = [];
 let auditActive = false;

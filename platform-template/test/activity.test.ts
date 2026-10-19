@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { activitySummary, workerActivity, categoryNames } from '../src/dashboard/public/activity.js';
 
 const worker = (overrides = {}) => ({
-  id: 'language-home', agent: 'language', categories: ['spelling_grammar'], status: 'completed',
+  id: 'spelling-grammar-home', agent: 'spelling-grammar', categories: ['spelling_grammar'], status: 'completed',
   pageUrl: 'https://example.test/', attempts: 1, issueCount: 0, ...overrides,
 });
 const run = (overrides = {}) => ({
@@ -56,7 +56,7 @@ test('failed startup and unavailable categories cannot look like full coverage',
 });
 
 test('human-readable activity includes retry attempts, skip reasons and retained findings', () => {
-  assert.match(workerActivity(worker({ status: 'running', attempts: 2 })), /Language · the home page: reviewing \(attempt 2\)/);
+  assert.match(workerActivity(worker({ status: 'running', attempts: 2 })), /Spelling & Grammar · the home page: reviewing \(attempt 2\)/);
   assert.match(workerActivity(worker({ status: 'skipped', message: 'No configured rules.' })), /skipped. No configured rules/);
   assert.match(workerActivity(worker({ status: 'failed', issueCount: 1, message: 'Request failed.' })), /Request failed. 1 finding retained/);
   assert.equal(activitySummary(null).tone, 'idle');

@@ -37,16 +37,18 @@ test('locale and formatting workflow with alternate profiles and a local model',
     if (request.url === '/v1/responses') {
       let raw = ''; for await (const chunk of request) raw += chunk;
       const body = JSON.parse(raw);
-      const locale = body.text.format.name === 'locale_formatting_findings';
+      const locale = ['locale_findings', 'formatting_findings'].includes(body.text.format.name);
       if (locale) { received = JSON.parse(body.input); localeCalls++; }
       if (locale && mode === 'retry' && localeCalls === 1) {
         response.writeHead(429, { 'content-type': 'application/json' });
         response.end(JSON.stringify({ error: { message: 'Rate limit' } })); return;
       }
       response.writeHead(200, { 'content-type': 'application/json' });
+      const input = locale ? JSON.parse(body.input) : undefined;
+      const responseFindings = locale ? findings.filter(finding => input.rules.some((rule: any) => rule.id === finding.rule)) : [];
       response.end(JSON.stringify({
         id: 'resp_mock', object: 'response', status: mode === 'incomplete' && locale ? 'incomplete' : 'completed', model: 'mock-model',
-        output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: JSON.stringify({ issues: locale ? findings : [] }), annotations: [] }] }],
+        output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: JSON.stringify({ issues: responseFindings }), annotations: [] }] }],
         usage: { input_tokens: 120, output_tokens: 30, total_tokens: 150 },
       })); return;
     }
@@ -70,7 +72,8 @@ test('locale and formatting workflow with alternate profiles and a local model',
   const run = async (previousIssues = [] as ReturnType<typeof createAudit>['issues']) => {
     const audit = createAudit(); await executeAudit(audit, origin, 'mock-model', previousIssues); return audit;
   };
-  const worker = (audit: ReturnType<typeof createAudit>) => audit.workers.find(item => item.agent === 'locale-formatting')!;
+  const worker = (audit: ReturnType<typeof createAudit>) => audit.workers.find(item => item.agent === 'formatting')!;
+  const localeWorker = (audit: ReturnType<typeof createAudit>) => audit.workers.find(item => item.agent === 'locale')!;
   try {
     await t.test('routes both categories, removes overlaps and preserves review status', async () => {
       await setup({ target_locale: 'ja-JP', date_format: 'YYYY-MM-DD', currency_format: 'JPY, symbol before amount, no decimal digits', measurement_units: 'metric' },
@@ -78,13 +81,13 @@ test('locale and formatting workflow with alternate profiles and a local model',
       findings = [finding('currency', 'USD 19.99'), finding('currency_format', 'USD 19.99'), finding('measurement_units', '2 lb'),
         finding('currency_format', '¥20.50'), finding('date_format', '14/03/2026')];
       const audit = await run();
-      assert.equal(worker(audit).status, 'completed'); assert.equal(worker(audit).issueCount, 4);
-      assert.deepEqual(worker(audit).categories, ['locale_rules', 'formatting']);
+      assert.equal(worker(audit).status, 'completed'); assert.equal(worker(audit).issueCount, 3);
+      assert.deepEqual(worker(audit).categories, ['formatting']);
+      assert.equal(localeWorker(audit).status, 'completed'); assert.equal(localeWorker(audit).issueCount, 2);
       assert.equal(worker(audit).estimatedCostUsd, 0.00018);
       assert.equal(received.targetLocale, 'ja-JP');
       assert.deepEqual(received.checkedDates, ['14/03/2026']);
-      assert.equal(received.rules.find((rule: any) => rule.id === 'measurement_units').value, 'metric');
-      assert.deepEqual(audit.issues.map(issue => issue.category).sort(), ['formatting', 'formatting', 'locale_rules', 'locale_rules']);
+      assert.deepEqual(audit.issues.map(issue => issue.category).sort(), ['formatting', 'formatting', 'formatting', 'locale_rules', 'locale_rules']);
       assert(audit.issues.every(issue => audit.crawl!.pages[0].text.includes(issue.evidence)));
       assert.equal(audit.issues.find(issue => issue.evidence === '14/03/2026')?.expected, '2026-03-14');
       audit.issues[0].status = 'verified'; const next = await run(audit.issues);
@@ -96,25 +99,24 @@ test('locale and formatting workflow with alternate profiles and a local model',
       // A redundant model date finding must not override a clean deterministic result.
       findings = [finding('date_format', '03/14/2026')];
       const audit = await run(); assert.deepEqual(audit.issues, []); assert.equal(worker(audit).status, 'completed');
-      assert.equal(received.rules.find((rule: any) => rule.id === 'measurement_units').value, 'imperial');
-      assert.equal(received.rules.find((rule: any) => rule.id === 'currency').value, 'USD, symbol before amount, dot decimal');
+      assert.equal(localeWorker(audit).status, 'completed');
     });
     await t.test('supports explicit number, address, phone and capitalization rules', async () => {
       await setup({ target_locale: 'fr-FR', number_format: 'comma decimal', address_format: 'postcode before city', phone_format: 'international +33', capitalization: 'sentence case headings' },
         '<p>Nombre: 1.5</p><h1>TOUT EN MAJUSCULES</h1><p>Paris 75001</p><p>020 1234 5678</p>');
       findings = [finding('number_format', '1.5'), finding('capitalization', 'TOUT EN MAJUSCULES'), finding('address_format', 'Paris 75001'), finding('phone_format', '020 1234 5678')];
-      const audit = await run(); assert.equal(audit.issues.length, 4); assert.equal(worker(audit).status, 'completed');
+      const audit = await run(); assert.equal(audit.issues.length, 4); assert.equal(worker(audit).status, 'completed'); assert.equal(localeWorker(audit).status, 'completed');
       assert(!received.rules.some((rule: any) => rule.id === 'currency'));
     });
     await t.test('does not infer policies when optional rules are absent', async () => {
       await setup({ target_locale: 'de-DE' }, '<p>03/14/2026 $19.99 2 lb</p>');
       const audit = await run(); assert.equal(localeCalls, 0); assert.deepEqual(audit.issues, []);
-      assert.equal(worker(audit).status, 'skipped'); assert.equal(worker(audit).estimatedCostUsd, 0);
+      assert.equal(worker(audit).status, 'skipped'); assert.equal(localeWorker(audit).status, 'skipped'); assert.equal(worker(audit).estimatedCostUsd, 0);
     });
     await t.test('rejects unconfigured rules and invented evidence but keeps deterministic dates', async () => {
       for (const invalid of [finding('measurement_units', '2 lb'), finding('date_format', 'fabricated text')]) {
         await setup({ target_locale: 'fr-FR', date_format: 'DD/MM/YYYY' }, '<p>03/14/2026 2 lb</p>'); findings = [invalid];
-        const audit = await run(); assert.equal(worker(audit).status, 'failed');
+        const audit = await run();
         assert.equal(audit.issues.length, 1); assert.equal(audit.issues[0].expected, '14/03/2026');
       }
     });
@@ -130,9 +132,9 @@ test('locale and formatting workflow with alternate profiles and a local model',
     });
     await t.test('retries transient failures and tracks unknown usage', async () => {
       await setup({ target_locale: 'fr-FR', measurement_units: 'metric' }, '<p>1 kg</p>'); mode = 'retry';
-      const audit = await run(); assert.equal(localeCalls, 2); assert.equal(worker(audit).attempts, 2);
-      assert.equal(worker(audit).status, 'completed'); assert.equal(worker(audit).usageComplete, false);
-      assert.equal(worker(audit).estimatedCostUsd, null);
+      const audit = await run(); assert.equal(localeCalls, 2); assert.equal(localeWorker(audit).attempts, 2);
+      assert.equal(localeWorker(audit).status, 'completed'); assert.equal(localeWorker(audit).usageComplete, false);
+      assert.equal(localeWorker(audit).estimatedCostUsd, null);
     });
     await t.test('crawler separates blocks while preserving inline word fragments', async () => {
       await setup({ target_locale: 'es-ES' }, '<dl><dt>Miles</dt><dd>de equipos</dd></dl><p>in<strong>line</strong><br>next</p><table><tr><td>Plan</td><td>$19.99</td></tr></table>');

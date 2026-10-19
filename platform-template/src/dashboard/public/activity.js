@@ -4,8 +4,8 @@ export const categoryNames = {
   terminology: 'Terminology', media: 'Media',
 };
 const agentNames = {
-  language: 'Language', links: 'Links', 'locale-formatting': 'Locale and formatting',
-  'brand-terminology': 'Brand and terminology', 'translation-quality': 'Translation quality', media: 'Media',
+  'spelling-grammar': 'Spelling & Grammar', language: 'Spelling & Grammar', links: 'Links', locale: 'Locale', formatting: 'Formatting',
+  'brand-voice': 'Brand voice', terminology: 'Terminology', 'translation-quality': 'Translation quality', media: 'Media',
 };
 const count = (number, noun) => `${number} ${number === 1 ? noun : noun === 'category' ? 'categories' : noun + 's'}`;
 const nameOf = worker => agentNames[worker.agent] || worker.agent;

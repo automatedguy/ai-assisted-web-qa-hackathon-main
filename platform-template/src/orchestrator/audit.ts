@@ -3,9 +3,9 @@ import { crawlSite, type CrawlResult } from "../crawler/crawl.js";
 import { loadProfile, loadIssueValidator } from "../config.js";
 import { categories, type QaIssue } from "../issues.js";
 import { checkBrokenLinks } from "../agents/links.js";
-import { languageAgent } from "../agents/language.js";
-import { localeFormattingAgent } from "../agents/locale-formatting.js";
-import { brandTerminologyAgent } from "../agents/brand-terminology.js";
+import { spellingGrammarAgent } from "../agents/spelling-grammar.js";
+import { localeAgent, formattingAgent } from "../agents/locale-formatting.js";
+import { brandVoiceAgent, terminologyAgent } from "../agents/brand-terminology.js";
 import { translationQualityAgent } from "../agents/translation-quality.js";
 import { mediaAgent } from "../agents/media.js";
 import { WorkerFailure } from "../agents/types.js";
@@ -14,9 +14,11 @@ import { captureIssueScreenshots } from "../visual-evidence.js";
 
 const agents: Agent[] = [
   { id: "links", categories: ["links"], scope: "site", execute: async ({ crawl }) => checkBrokenLinks(crawl) },
-  languageAgent,
-  localeFormattingAgent,
-  brandTerminologyAgent,
+  spellingGrammarAgent,
+  localeAgent,
+  formattingAgent,
+  brandVoiceAgent,
+  terminologyAgent,
   translationQualityAgent,
   mediaAgent,
 ];

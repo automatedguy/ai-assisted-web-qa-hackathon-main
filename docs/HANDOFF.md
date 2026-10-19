@@ -24,8 +24,8 @@ The demo replaces the practice site and profile with unseen inputs, without code
 
 ## Current Implementation
 
-All eight categories are implemented under a shared coordinator with six agents:
-Language, Links, Locale/Formatting, Brand/Terminology, Translation Quality and Media.
+All eight categories are implemented under a shared coordinator with eight agents:
+Spelling & Grammar, Links, Locale, Formatting, Brand Voice, Terminology, Translation Quality and Media.
 Links and numeric-date checks are deterministic. Media combines deterministic
 resource/metadata checks with model-based caption, alt text and image inspection.
 
@@ -36,9 +36,11 @@ resource/metadata checks with model-based caption, alt text and image inspection
 | Configuration | `src/config.ts`: loads YAML on each audit, validates required target locale, preserves additional profile fields |
 | Coordinator | `src/orchestrator/audit.ts`: agent registry, site/page dispatch, concurrency of two, isolated failures, issue validation and deduplication |
 | Worker contract | `src/agents/types.ts`: agent inputs, scope, declared categories, execution report, partial-failure findings |
-| Language | `src/agents/language.ts`: Responses structured outputs for `spelling_grammar`; exact source-evidence validation |
-| Locale/Formatting | `src/agents/locale-formatting.ts`: profile-driven policies, contextual model checks and overlap suppression; `date-format.ts`: deterministic numeric dates |
-| Brand/Terminology | `src/agents/brand-terminology.ts`: profile-driven tone/style and glossary checks, shared forbidden-term ownership, stable finding IDs |
+| Spelling & Grammar | `src/agents/spelling-grammar.ts`: Responses structured outputs for `spelling_grammar`; exact source-evidence validation |
+| Locale | `src/agents/locale-formatting.ts`: profile-driven currency, unit, address and phone checks |
+| Formatting | `src/agents/locale-formatting.ts`: profile-driven presentation checks plus deterministic numeric dates |
+| Brand Voice | `src/agents/brand-terminology.ts`: profile-driven tone/style and brand-only forbidden-term checks |
+| Terminology | `src/agents/brand-terminology.ts`: glossary checks and shared forbidden-term ownership |
 | Translation Quality | `src/agents/translation-quality.ts`: source/target meaning comparison; `reference-content.ts`: mapped Markdown loading within the configured directory |
 | Media | `src/agents/media.ts`: resource/metadata and visual/language checks; `media-resources.ts`: bounded fetches, image signatures and basic WebVTT extraction |
 | Shared model client | `src/agents/model-check.ts`: structured outputs, retries, exact evidence, token/cost tracking |
@@ -62,7 +64,7 @@ the view from the current snapshot. Skipped/failed checks and unrun categories s
 visible in the main activity bar. Coverage and technical details (including media
 checks) expand inside the panel. No additional model calls are made.
 
-The Language agent uses the profile's target locale and glossary, one request per
+The Spelling & Grammar agent uses the profile's target locale and glossary, one request per
 successful HTML page. It has a 60-second request timeout and one retry for transient
 failures. Every accepted audit finding passes JSON Schema validation. Text-agent
 evidence must be a nonempty exact substring of the page text. Translation findings separately

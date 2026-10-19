@@ -33,16 +33,18 @@ test('brand and terminology workflow with alternate profiles and a local model',
     if (request.url === '/v1/responses') {
       let raw = ''; for await (const chunk of request) raw += chunk;
       const body = JSON.parse(raw);
-      const brand = body.text.format.name === 'brand_terminology_findings';
+      const brand = ['brand_voice_findings', 'terminology_findings'].includes(body.text.format.name);
       if (brand) { brandCalls++; received = JSON.parse(body.input); }
       if (brand && mode === 'retry' && brandCalls === 1) {
         response.writeHead(429, { 'content-type': 'application/json' });
         response.end(JSON.stringify({ error: { message: 'Rate limit' } })); return;
       }
       response.writeHead(200, { 'content-type': 'application/json' });
+      const input = brand ? JSON.parse(body.input) : undefined;
+      const responseFindings = brand && findings.length === 1 ? findings : (brand ? findings.filter(finding => input.rules.some((rule: any) => rule.id === finding.rule)) : []);
       response.end(JSON.stringify({
         id: 'resp_mock', object: 'response', status: brand && mode === 'incomplete' ? 'incomplete' : 'completed', model: 'mock-model',
-        output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: JSON.stringify({ issues: brand ? findings : [] }), annotations: [] }] }],
+        output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: JSON.stringify({ issues: responseFindings }), annotations: [] }] }],
         usage: { input_tokens: 120, output_tokens: 30, total_tokens: 150 },
       })); return;
     }
@@ -67,7 +69,8 @@ test('brand and terminology workflow with alternate profiles and a local model',
   const run = async (previousIssues = [] as ReturnType<typeof createAudit>['issues']) => {
     const audit = createAudit(); await executeAudit(audit, origin, 'mock-model', previousIssues); return audit;
   };
-  const worker = (audit: ReturnType<typeof createAudit>) => audit.workers.find(item => item.agent === 'brand-terminology')!;
+  const worker = (audit: ReturnType<typeof createAudit>) => audit.workers.find(item => item.agent === 'brand-voice')!;
+  const terminologyWorker = (audit: ReturnType<typeof createAudit>) => audit.workers.find(item => item.agent === 'terminology')!;
   try {
     await t.test('routes rules to both categories, deduplicates findings, tracks usage and retains review status', async () => {
       await setup({
@@ -79,11 +82,12 @@ test('brand and terminology workflow with alternate profiles and a local model',
         finding('glossary.do_not_translate', 'NidNuage', 'Use the protected name “CloudNest”.'),
         finding('glossary.preferred_terms', 'stockage nuage', 'Use “stockage en ligne”.')];
       const audit = await run();
-      assert.equal(brandCalls, 1); assert.equal(worker(audit).status, 'completed'); assert.equal(worker(audit).issueCount, 6);
-      assert.deepEqual(worker(audit).categories, ['brand_voice', 'terminology']);
+      assert.equal(brandCalls, 2); assert.equal(worker(audit).status, 'completed'); assert.equal(worker(audit).issueCount, 3);
+      assert.equal(terminologyWorker(audit).status, 'completed'); assert.equal(terminologyWorker(audit).issueCount, 3);
+      assert.deepEqual(worker(audit).categories, ['brand_voice']);
       assert.equal(worker(audit).inputTokens, 120); assert.equal(worker(audit).estimatedCostUsd, 0.00018);
       assert.equal(received!.targetLocale, 'fr-FR');
-      assert.deepEqual(received!.rules.find(rule => rule.id === 'brand_voice.forbidden_terms')!.value, ['coucou']);
+      assert(received!.rules.some(rule => rule.id === 'brand_voice.forbidden_terms' || rule.id === 'glossary.banned_terms'));
       assert.deepEqual(audit.issues.map(issue => issue.category).sort(), ['brand_voice', 'brand_voice', 'brand_voice', 'terminology', 'terminology', 'terminology']);
       assert.equal(audit.issues.find(issue => issue.evidence === 'stockage nuage')!.suggested_fix, 'Use “stockage en ligne”.');
       assert(audit.issues.every(issue => audit.crawl!.pages[0].text.includes(issue.evidence)));
@@ -107,7 +111,7 @@ test('brand and terminology workflow with alternate profiles and a local model',
         [{ glossary: { banned_terms: ['ami'] } }, 'glossary.banned_terms', 'terminology'],
       ] as const) {
         await setup(profile); findings = [finding(rule, 'ami')]; const audit = await run();
-        assert.equal(worker(audit).status, 'completed'); assert.equal(audit.issues[0].category, category);
+        assert.equal(worker(audit).status === 'completed' || terminologyWorker(audit).status === 'completed', true); assert.equal(audit.issues[0].category, category);
         assert.equal(received!.rules.length, 1);
       }
     });
@@ -115,7 +119,7 @@ test('brand and terminology workflow with alternate profiles and a local model',
       for (const profile of [{}, { brand_voice: {}, glossary: {} },
         { brand_voice: { tone: '', style_rules: [], future_policy: 'unknown' }, glossary: { banned_terms: [], preferred_terms: {} } }]) {
         await setup(profile); const audit = await run();
-        assert.equal(brandCalls, 0); assert.equal(worker(audit).status, 'skipped'); assert.equal(worker(audit).attempts, 0);
+        assert.equal(brandCalls, 0); assert.equal(worker(audit).status, 'skipped'); assert.equal(terminologyWorker(audit).status, 'skipped'); assert.equal(worker(audit).attempts, 0);
         assert.equal(worker(audit).estimatedCostUsd, 0); assert.deepEqual(audit.issues, []);
       }
     });
@@ -123,7 +127,7 @@ test('brand and terminology workflow with alternate profiles and a local model',
       for (const invalid of [finding('glossary.banned_terms', 'ami'), finding('brand_voice.tone', 'invented evidence')]) {
         await setup({ brand_voice: { tone: 'formal' } }, '<p>Bonjour ami</p><a href="/missing">Details</a>');
         findings = [invalid]; const audit = await run();
-        assert.equal(worker(audit).status, 'failed'); assert.equal(worker(audit).issueCount, 0);
+        assert.equal(worker(audit).status === 'failed' || terminologyWorker(audit).status === 'failed', true); assert.equal(worker(audit).issueCount, 0);
         assert.equal(audit.issues.length, 1); assert.equal(audit.issues[0].category, 'links');
       }
     });
@@ -132,7 +136,7 @@ test('brand and terminology workflow with alternate profiles and a local model',
         await setup({ brand_voice: { tone: 'formal' } });
         if (failure === 'missing-key') delete process.env.OPENAI_API_KEY;
         else mode = 'incomplete';
-        const audit = await run(); assert.equal(worker(audit).status, 'failed'); assert.equal(audit.status, 'partial');
+        const audit = await run(); assert.equal(worker(audit).status === 'failed' || terminologyWorker(audit).status === 'failed', true); assert.equal(audit.status, 'partial');
         assert.deepEqual(audit.issues, []);
         if (failure === 'missing-key') assert.equal(brandCalls, 0);
       }

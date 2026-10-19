@@ -1,11 +1,11 @@
 # Workers and agents
 
 `types.ts` defines the common agent contract and observable worker result.
-`language.ts` owns the Language agent instructions. `locale-formatting.ts`
-owns policy selection, contextual locale/formatting instructions and overlap
-suppression; `date-format.ts` is its deterministic numeric-date tool.
-`brand-terminology.ts` owns brand tone/style and glossary checks, assigning
-shared forbidden terms to Terminology and reporting two categories per worker.
+`spelling-grammar.ts` owns the Spelling & Grammar agent instructions. `locale-formatting.ts`
+contains the specialized Locale and Formatting agents, their policy selection
+and contextual instructions; `date-format.ts` is Formatting's deterministic
+numeric-date tool. `brand-terminology.ts` contains the specialized Brand Voice
+and Terminology agents, assigning shared forbidden terms to Terminology.
 `translation-quality.ts` compares target pages with mapped Markdown sources;
 `reference-content.ts` resolves page mappings and confines read-only source access
 to the reference directory. Translation findings contain validated quotes from

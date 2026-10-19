@@ -1,7 +1,7 @@
 # QA Platform
 
-TypeScript / Express audit platform with a coordinator, OpenAI Language,
-Locale/Formatting, Brand/Terminology, Translation Quality and Media agents, and a
+TypeScript / Express audit platform with a coordinator, OpenAI Spelling & Grammar, Locale,
+Formatting, Brand Voice, Terminology, Translation Quality and Media agents, and a
 deterministic Links worker. All eight categories are implemented: spelling/grammar,
 links, formatting, locale rules, brand voice, terminology, translation quality, and media.
 Findings also receive best-effort annotated screenshots: Playwright renders each
@@ -83,16 +83,18 @@ to one of the worker's declared categories. Worker API reports now contain
 `categories: string[]` instead of the previous singular `category` field.
 
 - Links: checks fetched same-origin destinations for HTTP errors.
-- Language: one request per successful HTML page, using the YAML target locale
+- Spelling & Grammar: one request per successful HTML page, using the YAML target locale
   and glossary. Structured findings must contain exact evidence from that page.
-- Locale/Formatting: deterministic numeric-date checking followed by one model
-  request per successful HTML page with explicit applicable rules. The model
-  interprets natural-language policies and context; every finding cites a
-  configured rule and exact page-text evidence. The two categories share one
-  worker and request to avoid duplicate currency/unit findings and token usage.
-- Brand/Terminology: one model request per successful HTML page with supported
-  brand or glossary policies. Tone/style and terminology findings are categorized
-  separately, with glossary ownership of shared forbidden terms.
+- Locale: one model request per successful HTML page with applicable currency,
+  measurement, address or phone policies. It reports only `locale_rules`.
+- Formatting: deterministic numeric-date checking plus one model request per
+  successful HTML page with applicable date, number, currency-presentation or
+  capitalization rules. It reports only `formatting`.
+- Brand Voice: one model request per successful HTML page with tone, style and
+  brand-only forbidden-term policies. It reports only `brand_voice`.
+- Terminology: one model request per successful HTML page with banned terms,
+  protected names and preferred glossary equivalents. It reports only
+  `terminology`; shared forbidden terms belong here.
 - Translation Quality: one model request per successfully mapped page, comparing
   reference Markdown with target text. Both evidence quotes must match their
   respective inputs exactly before the finding is accepted.
@@ -132,7 +134,7 @@ same expression; prices are not automatically converted or relabeled. A
 currency-specific decimal rule does not create a general number policy.
 Model findings cannot override numeric dates already assessed by the tool.
 If the model step fails, valid deterministic date findings remain visible and
-the worker is marked failed. Model retry/usage reporting is shared with Language.
+the worker is marked failed. Model retry/usage reporting is shared with Spelling & Grammar.
 
 The crawler inserts spaces at block boundaries and line breaks while retaining
 inline word fragments, preventing synthetic errors such as joined table cells

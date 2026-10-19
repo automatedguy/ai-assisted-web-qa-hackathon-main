@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import { crawlSite, type CrawlResult } from "../crawler/crawl.js";
 import { loadProfile, loadIssueValidator } from "../config.js";
 import { categories, type QaIssue } from "../issues.js";
-import { checkBrokenLinks } from "../agents/links.js";
+import { linksAgent } from "../agents/links.js";
+import { collectRenderedPages } from "../crawler/rendered.js";
+import { executeWithRenderedChecks } from "../agents/rendered-checks.js";
+import { locateFindings, reconcileFindings } from "./reconcile.js";
 import { spellingGrammarAgent } from "../agents/spelling-grammar.js";
 import { localeAgent, formattingAgent, localeRules, formattingRules } from "../agents/locale-formatting.js";
 import { brandVoiceAgent, terminologyAgent, brandVoiceRules, terminologyRules } from "../agents/brand-terminology.js";
@@ -13,7 +16,7 @@ import type { Agent, WorkerRun } from "../agents/types.js";
 import { captureIssueScreenshots } from "../visual-evidence.js";
 
 const agents: Agent[] = [
-  { id: "links", categories: ["links"], scope: "site", execute: async ({ crawl }) => checkBrokenLinks(crawl) },
+  linksAgent,
   spellingGrammarAgent,
   localeAgent,
   formattingAgent,
@@ -28,6 +31,7 @@ export type Audit = {
   targetLocale?: string; crawl?: CrawlResult; workers: WorkerRun[]; issues: QaIssue[];
   coverage: Array<{ category: QaIssue["category"]; implemented: boolean }>;
   error?: string;
+  browserCoverage?: Array<{ pageUrl: string; status: string; states: number; limitations: string[] }>;
 };
 export function createAudit(): Audit {
   return {
@@ -45,6 +49,9 @@ export async function executeAudit(audit: Audit, siteUrl: string, model: string,
     const crawl = audit.crawl = await crawlSite(siteUrl);
     const pages = crawl.pages.filter(page => page.status >= 200 && page.status < 300);
     if (!pages.length) throw new Error("No successful HTML pages were available to audit.");
+    audit.phase = "Exploring browser states";
+    await collectRenderedPages(pages);
+    audit.browserCoverage = pages.map(page => ({ pageUrl: page.url, status: page.rendered!.status, states: page.rendered!.states, limitations: page.rendered!.limitations }));
     audit.phase = "Running workers";
     const policyRules = {
       locale: localeRules(profile), formatting: formattingRules(profile),
@@ -67,15 +74,20 @@ export async function executeAudit(audit: Audit, siteUrl: string, model: string,
         report.stage = agent.id === "links" ? "Checking HTTP responses" : "Preparing checks";
         const accept = (issues: QaIssue[]) => {
           if (issues.some(issue => !validateIssue(issue) || !agent.categories.includes(issue.category))) throw new Error("Worker findings failed issue schema validation.");
-          for (const issue of issues) {
+          const located = locateFindings(issues, page);
+          for (const issue of located) {
             if (audit.issues.some(existing => existing.id === issue.id)) continue;
-            issue.status = previous.find(existing => existing.id === issue.id)?.status ?? "new";
+            const exact = previous.find(existing => existing.id === issue.id);
+            // Migrate an unambiguous pre-location ID without copying one old decision to multiple occurrences.
+            const legacyId = issue.id.replace(/-[0-9a-f]{8}$/, "");
+            const uniqueLegacy = located.filter(candidate => candidate.id.replace(/-[0-9a-f]{8}$/, "") === legacyId).length === 1;
+            issue.status = (exact ?? (uniqueLegacy ? previous.find(existing => existing.id === legacyId && !existing.location.selector_or_xpath) : undefined))?.status ?? "new";
             audit.issues.push(issue);
             report.issueCount++;
           }
         };
         try {
-          const issues = await agent.execute({ crawl, page, profile, model, report });
+          const issues = await executeWithRenderedChecks(agent, { crawl, page, profile, model, report });
           accept(issues);
           // Agents can explicitly skip when their optional profile rules are absent.
           if ((report as WorkerRun).status !== "skipped") report.status = "completed";
@@ -98,11 +110,14 @@ export async function executeAudit(audit: Audit, siteUrl: string, model: string,
     await Promise.all(Array.from({ length: Math.min(2, tasks.length) }, async () => {
       while (next < tasks.length) { const task = tasks[next++]; await task(); }
     }));
+    const reconciled = reconcileFindings(audit.issues);
+    audit.issues.splice(0, audit.issues.length, ...reconciled);
+    for (const worker of audit.workers) worker.issueCount = audit.issues.filter(issue => worker.categories.includes(issue.category) && (!worker.pageUrl || worker.pageUrl === issue.location.page_url)).length;
     if (audit.issues.length) {
       audit.phase = "Capturing visual evidence";
       await captureIssueScreenshots(audit.id, audit.issues);
     }
-    audit.status = audit.workers.some(worker => worker.status === "failed") || crawl.errors.length > 0 || crawl.limitReached || audit.coverage.some(item => !item.implemented) ? "partial" : "completed";
+    audit.status = audit.workers.some(worker => worker.status === "failed") || audit.browserCoverage?.some(page => page.status === "partial") || crawl.errors.length > 0 || crawl.limitReached || audit.coverage.some(item => !item.implemented) ? "partial" : "completed";
     audit.phase = "Finished";
   } catch (error) {
     audit.status = "failed"; audit.phase = "Failed";

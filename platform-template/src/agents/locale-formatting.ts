@@ -3,6 +3,8 @@ import type { QaIssue } from "../issues.js";
 import { checkDateFormat, issueId } from "./date-format.js";
 import { requestFindings, type Findings } from "./model-check.js";
 import { WorkerFailure, type Agent } from "./types.js";
+import { loadReference } from "./reference-content.js";
+import { sourcePriceCorrection } from "./source-price.js";
 
 export type Rule = { id: string; category: "formatting" | "locale_rules"; value: unknown };
 
@@ -13,7 +15,7 @@ function configured(value: unknown): boolean {
 }
 
 export function localeRules(profile: Profile): Rule[] {
-  const rules: Rule[] = [];
+  const rules: Rule[] = [{ id: "target_locale", category: "locale_rules", value: profile.locale.target_locale }];
   if (configured(profile.locale.currency ?? profile.locale.currency_format)) rules.push({ id: "currency", category: "locale_rules", value: profile.locale.currency ?? profile.locale.currency_format });
   for (const id of ["measurement_units", "address_format", "phone_format"]) if (configured(profile.locale[id])) rules.push({ id, category: "locale_rules", value: profile.locale[id] });
   return rules;
@@ -58,13 +60,19 @@ export const localeAgent: Agent = {
     if (!page) throw new Error("Locale agent requires a page.");
     const rules = localeRules(profile);
     if (!rules.length) { report.status = "skipped"; report.attempts = 0; report.estimatedCostUsd = 0; report.message = "No explicit locale rules configured."; return []; }
+    const source = await loadReference(page.url, context.crawl.startUrl, profile).catch(() => null);
     try {
       const findings = await requestFindings(context, {
         name: "locale_findings", ruleIds: rules.map(rule => rule.id),
-        instructions: `You are the specialized Locale QA agent. Audit ONLY currency identity, physical measurement units, address conventions and phone conventions.\n${commonInstructions}\nFor wrong currency or units, emit one issue for that expression. Do not invent exchange rates, replacement prices, addresses or phone numbers. Physical unit conversions may be approximate and must be labeled. Respect quoted foreign prices, international contact details, comparisons, product identifiers and digital storage units unless the configured rule clearly applies. Do not report spelling, grammar, formatting presentation, brand, terminology, translation, links or media issues.`,
-        input: { targetLocale: profile.locale.target_locale, rules, glossary: profile.glossary ?? {}, page: { url: page.url, language: page.language, text: page.text } },
+        instructions: `You are the specialized Locale QA agent. Audit currency identity, physical measurement units, address/phone conventions and wrong-language user-facing text against target_locale.\n${commonInstructions}\nFor wrong currency or units, emit one issue for each distinct expression/location. Do not invent exchange rates, replacement prices, addresses or phone numbers. When a mapped source explicitly gives the same entity's price in the required currency, preserve its numerical amount and use the complete configured notation; this is correcting localization, not exchange-rate conversion. Never substitute an example price from the profile for the actual price. If source authority is absent, request confirmation rather than assuming currency parity. Use source physical units when supplied; otherwise label conversions approximate. Respect quoted foreign prices, international contact details, comparisons, product identifiers and digital storage units. Ordinary local units/terminology defects are minor; wrong prices are major. Do not report spelling, grammar, brand, terminology, translation meaning, links or media issues.`,
+        input: { targetLocale: profile.locale.target_locale, rules, glossary: profile.glossary ?? {},
+          source,
+          page: { url: page.url, language: page.language, text: page.text, elements: page.elements } },
       });
-      return findingsToIssues(page.url, findings, rules);
+      return findingsToIssues(page.url, findings, rules).map(issue => {
+        const correction = issue.assessment?.rule?.id === "currency" ? sourcePriceCorrection(page, issue.evidence, profile, source?.text) : undefined;
+        return correction ? { ...issue, expected: correction, suggested_fix: `Use «${correction}», preserving the mapped source amount; no currency conversion is required.` } : issue;
+      });
     } catch (error) { throw new WorkerFailure(error instanceof Error ? error.message : "Locale model step failed.", []); }
   },
 };
@@ -81,7 +89,7 @@ export const formattingAgent: Agent = {
       const findings = await requestFindings(context, {
         name: "formatting_findings", ruleIds: rules.map(rule => rule.id),
         instructions: `You are the specialized Formatting QA agent. Audit ONLY date, number, currency presentation, capitalization and configured formatting rules.\n${commonInstructions}\nNumeric dates listed in checkedDates have already been checked deterministically; do not report them again. For other dates, do not guess ambiguous month/day order. currency_format concerns notation and presentation only; currency identity belongs to the Locale agent. Do not report spelling, grammar, locale identity, brand, terminology, translation, links or media issues. Do not invent exchange rates or replacement prices.`,
-        input: { targetLocale: profile.locale.target_locale, rules, glossary: profile.glossary ?? {}, checkedDates: dates.checkedDates, page: { url: page.url, language: page.language, text: page.text } },
+        input: { targetLocale: profile.locale.target_locale, rules, glossary: profile.glossary ?? {}, checkedDates: dates.checkedDates, page: { url: page.url, language: page.language, text: page.text, elements: page.elements } },
       });
       return findingsToIssues(page.url, findings, rules, dates);
     } catch (error) { throw new WorkerFailure(error instanceof Error ? error.message : "Formatting model step failed.", dates.issues); }

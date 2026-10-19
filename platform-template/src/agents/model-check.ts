@@ -21,6 +21,7 @@ export type Findings = { issues: Array<{
   description: string; evidence: string; expected: string; confidence: number; suggested_fix: string; rule?: string;
   source_evidence?: string; kind?: "mistranslation" | "omission" | "addition" | "meaning_drift";
   asset_id?: string; check?: "alt_language" | "image_content" | "image_text" | "caption_language";
+  element_id?: string; destination_evidence?: string;
 }> };
 function rate(name: string): number | null {
   const raw = process.env[name];
@@ -32,11 +33,15 @@ type Options = {
   name: string; instructions: string; input: unknown; ruleIds?: string[]; sourceText?: string;
   images?: Array<{ id: string; dataUrl: string }>;
   mediaAssets?: Record<string, { alt: string | null; captionText: string | null; visual: boolean }>;
+  evidenceItems?: Record<string, string>;
+  linkTargets?: Record<string, string>;
 };
 
 export async function requestFindings({ page, model, report }: AgentContext, options: Options): Promise<Findings["issues"]> {
   const item = findingSchema.properties.issues.items;
   const extraProperties = {
+    ...(options.evidenceItems ? { element_id: { type: "string", enum: Object.keys(options.evidenceItems) } } : {}),
+    ...(options.linkTargets ? { destination_evidence: { type: "string", minLength: 1 } } : {}),
     ...(options.ruleIds ? { rule: { type: "string", enum: options.ruleIds } } : {}),
     ...(options.sourceText !== undefined ? {
       source_evidence: { type: "string", minLength: 1 },
@@ -59,14 +64,16 @@ export async function requestFindings({ page, model, report }: AgentContext, opt
   if (!page) throw new Error("Model check requires a page.");
   if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured.");
   // Fail visibly rather than silently claiming to have checked a truncated page.
-  if (page.text.length > 24000) throw new Error("Page exceeds the 24,000-character model-check limit; chunking is not implemented yet.");
+  if (!options.evidenceItems && page.text.length > 24000) throw new Error("Page exceeds the 24,000-character model-check limit; chunking is not implemented yet.");
   const client = new OpenAI({ maxRetries: 0, timeout: 60000 });
   report.model = model;
   report.estimatedCostUsd = null;
   const inputRate = rate("OPENAI_INPUT_USD_PER_MILLION");
   const outputRate = rate("OPENAI_OUTPUT_USD_PER_MILLION");
   for (let attempt = 1; attempt <= 2; attempt++) {
-    report.attempts = attempt;
+    report.modelCalls = (report.modelCalls ?? 0) + 1;
+    report.attempts = report.modelCalls;
+    report.requestAttempt = attempt;
     report.stage = "Reviewing content with model";
     let result;
     try {
@@ -111,8 +118,12 @@ export async function requestFindings({ page, model, report }: AgentContext, opt
           ["image_content", "image_text"].includes(issue.check ?? "") && asset.visual);
         if (!valid) throw new Error("Media finding did not match an inspected asset or its evidence; no model findings accepted.");
       }
-    } else if (parsed.issues.some(issue => !issue.evidence.trim() || !page.text.includes(issue.evidence))) {
+    } else if (parsed.issues.some(issue => !issue.evidence.trim() || !(options.evidenceItems ? options.evidenceItems[issue.element_id ?? ""] : page.text)?.includes(issue.evidence))) {
       throw new Error("Model evidence did not match the source page; no findings accepted.");
+    }
+    if (options.linkTargets && parsed.issues.some(issue => !issue.destination_evidence?.trim() ||
+      !options.linkTargets![issue.element_id ?? ""]?.includes(issue.destination_evidence))) {
+      throw new Error("Link evidence did not match the inspected destination; no findings accepted.");
     }
     if (options.sourceText !== undefined && parsed.issues.some(issue =>
       !issue.source_evidence?.trim() || !options.sourceText!.includes(issue.source_evidence))) {

@@ -2,10 +2,11 @@
 
 TypeScript / Express audit platform with a coordinator, OpenAI Spelling & Grammar, Locale,
 Formatting, Brand Voice, Terminology, Translation Quality and Media agents, and a
-deterministic Links worker. All eight categories are implemented: spelling/grammar,
+Links agent with deterministic and semantic checks. All eight categories are implemented: spelling/grammar,
 links, formatting, locale rules, brand voice, terminology, translation quality, and media.
 Findings also receive best-effort annotated screenshots: Playwright renders each
-affected page and red markers identify the matching XPath or closest text block.
+affected page, replays recorded interactions at the captured viewport, and red markers
+identify the matching selector/XPath or closest text block.
 
 ## Run locally
 
@@ -95,11 +96,18 @@ exposes its declared categories and dispatch scope. Each finding must belong
 to one of the worker's declared categories. Worker API reports now contain
 `categories: string[]` instead of the previous singular `category` field.
 
-- Links: checks fetched same-origin destinations for HTTP errors.
+- Links: checks fetched same-origin destinations for HTTP errors and missing
+  fragments, then reviews anchor promises against actual destination content in
+  batches of twelve, capped at 120 candidates per page with explicit incomplete
+  coverage beyond that limit. Both anchor and destination quotes are validated. The
+  model-free **Crawl and check links only** action does not perform semantic review.
 - Spelling & Grammar: one request per successful HTML page, using the YAML target locale
   and glossary. Structured findings must contain exact evidence from that page.
-- Locale: one model request per successful HTML page with applicable currency,
-  measurement, address or phone policies. It reports only `locale_rules`.
+- Locale: one model request per successful HTML page for target-language copy and
+  applicable currency, measurement, address or phone policies. It reports only
+  `locale_rules`. Available mapped source prices inform corrections; without source
+  authority the agent must not assume exchange-rate parity or replace actual prices
+  with profile examples.
 - Formatting: deterministic numeric-date checking plus one model request per
   successful HTML page with applicable date, number, currency-presentation or
   capitalization rules. It reports only `formatting`.
@@ -125,11 +133,12 @@ to one of the worker's declared categories. Worker API reports now contain
 ## Locale and formatting rules
 
 Rules are read from the YAML profile on each audit. Missing optional rules
-do not acquire defaults from `target_locale`; with no applicable rules the
-worker is visibly skipped and makes no API request.
+do not acquire defaults from `target_locale`. Locale always checks the explicit
+target language; Formatting skips when its optional policies are absent.
 
 | Profile field | Check/category |
 |---|---|
+| `locale.target_locale` | Wrong-language interface copy and accessible names (`locale_rules`) |
 | `locale.date_format` | Date notation (`formatting`) |
 | `locale.number_format` | Explicit number separators/notation (`formatting`) |
 | `locale.currency_format` | Currency notation (`formatting`) and required currency identity (`locale_rules`) when specified |
@@ -153,6 +162,58 @@ The crawler inserts spaces at block boundaries and line breaks while retaining
 inline word fragments, preventing synthetic errors such as joined table cells
 or definition-list entries. Extracted text is still normalized, not a browser
 layout: whitespace/layout and raw HTML markup validation are not implemented.
+
+## Browser-state checks and catalog regression
+
+Before dispatch, `src/crawler/rendered.ts` captures desktop (1440px) and mobile
+(390px) states with Playwright. It discovers radio filters, select options, search
+fields, details disclosures and mobile navigation controls; it does not import
+practice-site selectors or strings. Each action starts from a fresh page state.
+Captured text and accessible attributes feed the existing Spelling & Grammar and
+Locale agents in bounded batches (up to eight per agent/page, 16,000 characters
+per batch). These reviews and semantic links add model calls and API cost.
+Formatting checks visible dates deterministically, using ISO `datetime` metadata
+to disambiguate swapped day/month values without treating metadata itself as copy.
+
+Exploration uses fresh unauthenticated contexts, blocks non-GET/cross-origin
+requests and video downloads, and never intentionally submits forms or activates
+arbitrary action buttons. Discovery is limited to independent single actions, not
+all combinations or authenticated workflows. The defaults are 16 states per
+viewport and a 60-second exploration budget per page; `QA_MAX_STATES_PER_VIEWPORT`
+can set a limit from 1 to 40. Browser failures/budget limits make coverage partial.
+`QA_DISABLE_BROWSER_CHECKS=1` explicitly skips this stage; the dashboard reports it.
+Use `QA_BROWSER_PATH` for a local Chrome executable or install Playwright Chromium.
+
+`browserCoverage` reports state counts and limitations. Findings can retain
+`reproduction` with viewport, ordered steps, observed attribute and actual resource
+URL. Both finding Details and activity explanations expose this information.
+Screenshots replay the state and refuse to attach the wrong responsive image.
+Repeated text at distinct elements gets distinct identities. Reconciliation removes
+overlapping voice findings and gives currency-identity corrections precedence over
+conflicting notation-only fixes at the same element; independent locations remain.
+For simple table prices, an unambiguous matching source row and required currency
+also enable deterministic correction of the notation while preserving the exact
+source amount. Ambiguous rows, grouped amounts and absent source authority are not
+automatically repaired. This never uses a profile example as an actual price.
+
+Validation commands (run inside `platform-template/`):
+
+- `npm test`: offline unit/integration checks with simulated model responses;
+  browser exploration and screenshots are disabled here.
+- `npm run test:catalog-browser`: an isolated practice-site server, real browser
+  interactions, generated-copy observations, all three mobile-menu occurrences,
+  all four sorted dates, responsive resource selection and screenshot replay.
+  No `.env` or model calls. This verifies discovery and deterministic checks, not
+  live model accuracy.
+- `QA_ALLOW_LIVE_AUDIT=1 npm run test:catalog-live`: explicitly authorized paid
+  audit using `.env`; writes audit JSON and a 25-case comparison to a temporary
+  directory without replacing the dashboard's current run. Success requires all
+  25 case matches, three mobile-menu pages and four date elements. Inspect the
+  report and corrections manually: evidence matching alone is not certification
+  of accuracy, severity or absence of false positives.
+
+Catalog expectations live only in `test/catalog-cases.ts`. Keep unseen-profile and
+valid-counterexample tests alongside the practice benchmark.
 
 ## Brand voice and terminology rules
 
@@ -282,13 +343,13 @@ a full rendering or conformance validator.
 Audit results and review decisions are in memory; restarting clears them.
 Only the latest run is retained. Durable history and review audit trails are
 still pending. Overall runs are labeled **partial** while any category is
-unimplemented, a worker fails, or crawl coverage is incomplete. **Completed** means
+unimplemented, a worker fails, or crawl/browser coverage is incomplete. **Completed** means
 the run finished without those failures; inspect worker skips and media limitations
 to understand what was actually checked. Findings themselves do not make a run partial.
 
-Next milestones are durable run/review history, expanded link checks, Docker
-validation and an unseen-input rehearsal. Links currently covers fetched same-origin HTTP errors only; wrong-locale links and
-anchor/destination meaning are pending. Page agents skip non-success responses,
+Next milestones are durable run/review history, Docker validation and an unseen-input
+rehearsal. External links and dedicated destination-language checks remain pending.
+Page agents skip non-success responses,
 and pages over 24,000 characters fail their model step visibly until chunking
 is added. Contextual locale/formatting checks depend on model judgment and need
 human review; tests with a simulated API verify routing/validation, not live

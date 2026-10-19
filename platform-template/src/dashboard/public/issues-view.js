@@ -54,7 +54,7 @@ export function createIssuesView(document, onReview) {
     card.details = element('details', 'issue-details');
     const fields = element('dl', 'issue-detail-fields');
     card.detailFields = {};
-    for (const field of ['Confidence', 'Element', 'Selector / XPath']) {
+    for (const field of ['Confidence', 'Element', 'Selector / XPath', 'Reproduction', 'Screenshot status']) {
       const group = element('div'); const value = element('dd');
       group.append(element('dt', '', field), value); fields.append(group);
       card.detailFields[field] = { group, value };
@@ -124,6 +124,11 @@ export function createIssuesView(document, onReview) {
         for (const [field, value] of Object.entries({
           Confidence: `${Math.round(issue.confidence * 100)}%`, Element: issue.location.element_type,
           'Selector / XPath': issue.location.selector_or_xpath,
+          'Screenshot status': issue.visual_evidence?.note,
+          Reproduction: issue.reproduction ? `${issue.reproduction.viewport.width} × ${issue.reproduction.viewport.height}px` +
+            (issue.reproduction.attribute ? ` · attribute: ${issue.reproduction.attribute}` : '') +
+            '\n' + (issue.reproduction.steps.map(step => `${step.action} ${step.selector}${step.value !== undefined ? ' → ' + step.value : ''}`).join('\n') || 'Initial page state') +
+            (issue.reproduction.resourceUrl ? '\nResource: ' + issue.reproduction.resourceUrl : '') : undefined,
         })) {
           card.detailFields[field].group.hidden = !value;
           setText(card.detailFields[field].value, value || '');

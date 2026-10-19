@@ -1,6 +1,8 @@
 import * as cheerio from "cheerio";
+import type { RenderedPage } from "./rendered.js";
 
-export type PageLink = { text: string; href: string; selector: string };
+export type PageElement = { selector: string; text: string; context: string; tag: string; ancestors?: string[]; entity?: string };
+export type PageLink = { text: string; href: string; selector: string; rawHref?: string };
 export type PageImage = { src: string; alt: string | null; candidates: string[]; selector: string; context: string; decorative: boolean };
 export type PageTrack = {
   src: string;
@@ -22,6 +24,9 @@ export type CrawledPage = {
   images: PageImage[];
   tracks: PageTrack[];
   videos: PageVideo[];
+  elements?: PageElement[];
+  sections?: Record<string, string>;
+  rendered?: RenderedPage;
 };
 
 export type CrawlResult = {
@@ -90,9 +95,11 @@ export async function crawlSite(rawStartUrl: string): Promise<CrawlResult> {
           const anchor = $(element);
           const href = anchor.attr("href")?.trim() ?? "";
           const resolved = pageUrl(href, url);
+          let fragment = "";
+          try { fragment = new URL(href, url).hash; } catch { /* Invalid URLs stay inspectable. */ }
           return {
             text: anchor.text().replace(/\s+/g, " ").trim(),
-            href: resolved ?? href,
+            href: resolved ? resolved + fragment : href, rawHref: href,
             selector: `(//a[@href])[${index + 1}]`,
           };
         });
@@ -134,6 +141,17 @@ export async function crawlSite(rawStartUrl: string): Promise<CrawlResult> {
         };
       });
       const tracks = videos.flatMap(video => video.tracks);
+      const clean = (text: string) => text.replace(/\s+/g, " ").trim();
+      const elements: PageElement[] = $("p, h1, h2, h3, h4, li, td, th, time, button, a, label, summary")
+        .toArray().map(element => {
+          const node = $(element); const tag = element.tagName;
+          const siblings = $(tag).toArray();
+          return { selector: `(//${tag})[${siblings.indexOf(element) + 1}]`, tag,
+            entity: clean(node.closest("tr").children("th,td").first().text()) || undefined,
+            ancestors: node.parents().toArray().map(parent => `(//${parent.tagName})[${$(parent.tagName).toArray().indexOf(parent) + 1}]`),
+            text: clean(node.text()), context: clean(node.closest("tr").length ? node.closest("tr").text() : node.closest("section,article").find("h1,h2,h3").first().text()).slice(0, 400) };
+        }).filter(element => element.text);
+      const sections = Object.fromEntries($("[id]").toArray().map(element => [$(element).attr("id")!, clean($(element).text())]));
 
       pages.push({
         url,
@@ -145,6 +163,7 @@ export async function crawlSite(rawStartUrl: string): Promise<CrawlResult> {
         images,
         tracks,
         videos,
+        elements, sections,
       });
 
       for (const link of links) {

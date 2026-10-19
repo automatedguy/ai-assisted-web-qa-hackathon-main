@@ -33,6 +33,9 @@ export const mediaAgent: Agent = {
           ["alt_language", "caption_language"].includes(check) ? "model_text" : "deterministic" },
         evidence: `${asset.selector} · ${asset.src || "(missing URL)"}\n${evidence}`, expected, suggested_fix, confidence,
         location: { page_url: page.url, element_type: asset.elementType, selector_or_xpath: asset.selector }, status: "new" });
+      const issue = issues.find(issue => issue.id === id);
+      const resource = page.rendered?.resources.find(item => item.selector === asset.selector && item.url === asset.src);
+      if (issue && resource) issue.reproduction = resource.reproduction;
     };
     const record = (asset: string, check: string, status: "completed" | "failed" | "skipped", message: string) => {
       report.mediaChecks!.push({ asset, check, status, message });

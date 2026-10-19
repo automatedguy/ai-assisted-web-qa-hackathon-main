@@ -1,3 +1,11 @@
+export type BrowserStep = { action: "click" | "check" | "fill" | "select"; selector: string; value?: string };
+export type Reproduction = {
+  viewport: { width: number; height: number };
+  steps: BrowserStep[];
+  attribute?: string;
+  resourceUrl?: string;
+  stateId?: string;
+};
 export type QaIssue = {
   id: string;
   category:
@@ -21,6 +29,7 @@ export type QaIssue = {
     note?: string;
   };
   description: string;
+  reproduction?: Reproduction;
   assessment?: {
     method: "deterministic" | "model_text" | "model_visual";
     rule?: { id: string; value: string };

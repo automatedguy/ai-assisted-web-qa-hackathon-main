@@ -6,6 +6,8 @@ export type WorkerRun = {
   id: string; agent: string; categories: QaIssue["category"][]; pageUrl?: string;
   status: "queued" | "running" | "completed" | "failed" | "skipped";
   attempts: number; durationMs: number; issueCount: number;
+  modelCalls?: number;
+  requestAttempt?: number;
   inputTokens: number; outputTokens: number; estimatedCostUsd: number | null;
   usageComplete: boolean; model?: string; message?: string;
   startedAt?: string; finishedAt?: string; stage?: string;

@@ -4,9 +4,9 @@ export const agentCatalog = [
   { id: 'formatting', category: 'formatting', name: 'Formatting',
     scope: 'Dates, numbers, currency notation and configured capitalization rules.', limit: 'Checks extracted text; does not validate CSS or page layout.' },
   { id: 'links', category: 'links', name: 'Links',
-    scope: 'HTTP errors at fetched destinations within the site.', limit: 'External links, destination meaning and unvisited URLs are not checked.' },
+    scope: 'HTTP errors, missing fragments and anchor/destination meaning within the site.', limit: 'External and unvisited destinations are not checked; semantic judgments need review.' },
   { id: 'locale', category: 'locale_rules', name: 'Locale',
-    scope: 'Configured currency, measurement, address and phone conventions.', limit: 'Optional policies must be supplied in the profile.' },
+    scope: 'Target-language interface copy, accessible names, currency, measurement, address and phone conventions.', limit: 'Only captured states are reviewed; optional policies must be supplied in the profile.' },
   { id: 'brand-voice', category: 'brand_voice', name: 'Brand Voice',
     scope: 'Configured tone, style and brand-only forbidden terms.', limit: 'Tone is contextual; review the cited rule and evidence.' },
   { id: 'translation-quality', category: 'translation_quality', name: 'Translation Quality',
@@ -98,7 +98,7 @@ export function createAgentCards(document, onViewFindings) {
       const details = disclosure('', 'agent-finding');
       const fields = node('dl', 'agent-evidence');
       const values = {};
-      for (const label of ['Method', 'Rule', 'Page', 'Observed', 'Explanation', 'Expected', 'Suggested fix']) {
+      for (const label of ['Method', 'Rule', 'Page', 'Observed', 'Explanation', 'Expected', 'Suggested fix', 'Reproduction']) {
         const group = node('div');
         const value = node('dd');
         group.append(node('dt', '', label), value); fields.append(group);
@@ -114,6 +114,10 @@ export function createAgentCards(document, onViewFindings) {
       Rule: rule ? rule.id + ': ' + rule.value : undefined,
       Page: path({ pageUrl: issue.location.page_url }), Observed: issue.evidence,
       Explanation: issue.description, Expected: issue.expected, 'Suggested fix': issue.suggested_fix,
+      Reproduction: issue.reproduction ? `${issue.reproduction.viewport.width} × ${issue.reproduction.viewport.height}px\n` +
+        (issue.reproduction.attribute ? 'Attribute: ' + issue.reproduction.attribute + '\n' : '') +
+        (issue.reproduction.steps.map(step => `${step.action} ${step.selector}${step.value !== undefined ? ' → ' + step.value : ''}`).join('\n') || 'Initial page state') +
+        (issue.reproduction.resourceUrl ? '\nResource: ' + issue.reproduction.resourceUrl : '') : undefined,
     };
     for (const [label, value] of Object.entries(values)) {
       entry.values[label].group.hidden = !value;
@@ -138,7 +142,7 @@ export function createAgentCards(document, onViewFindings) {
         if (data.notApplicable) counts.push(data.notApplicable + ' not applicable');
         set(card.progress, data.workers.length ? counts.join(' · ') : 'No checks have run.');
         set(card.active, data.active.map(w => path(w) + ' · ' + (w.stage || 'Reviewing page') +
-          (w.attempts > 1 ? ' · attempt ' + w.attempts : '')).join('\n'));
+          ((w.requestAttempt ?? w.attempts) > 1 ? ' · attempt ' + (w.requestAttempt ?? w.attempts) : '')).join('\n'));
         card.active.hidden = !data.active.length;
         const workerIds = new Set(data.workers.map(w => w.id));
         for (const [id, item] of card.pageNodes) if (!workerIds.has(id)) { item.remove(); card.pageNodes.delete(id); }

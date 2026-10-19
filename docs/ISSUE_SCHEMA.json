@@ -55,6 +55,16 @@
       }
     },
     "description": { "type": "string" },
+    "reproduction": {
+      "type": "object", "required": ["viewport", "steps"],
+      "properties": {
+        "viewport": { "type": "object", "required": ["width", "height"], "properties": { "width": { "type": "integer", "minimum": 1 }, "height": { "type": "integer", "minimum": 1 } } },
+        "steps": { "type": "array", "items": { "type": "object", "required": ["action", "selector"], "properties": {
+          "action": { "enum": ["click", "check", "fill", "select"] }, "selector": { "type": "string" }, "value": { "type": "string" }
+        } } },
+        "attribute": { "type": "string" }, "resourceUrl": { "type": "string" }, "stateId": { "type": "string" }
+      }
+    },
     "evidence": { "type": "string" },
     "expected": { "type": "string" },
     "confidence": { "type": "number", "minimum": 0, "maximum": 1 },

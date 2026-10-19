@@ -17,7 +17,7 @@ test('audit workflow with an unseen profile and simulated model', async t => {
       let body = '';
       for await (const chunk of request) body += chunk;
       const formatName = JSON.parse(body).text.format.name;
-      if (['brand_voice_findings', 'terminology_findings'].includes(formatName)) {
+      if (['brand_voice_findings', 'terminology_findings', 'locale_findings'].includes(formatName)) {
         response.writeHead(200, { 'content-type': 'application/json' });
         response.end(JSON.stringify({
           id: 'resp_brand', object: 'response', status: 'completed', model: 'mock-model',
@@ -71,7 +71,7 @@ test('audit workflow with an unseen profile and simulated model', async t => {
       assert.equal(audit.workers.length, 8); // 404 error page is not sent to page workers.
       assert(audit.workers.every(worker => worker.status === 'completed' || worker.status === 'skipped'));
       const locale = audit.workers.find(worker => worker.agent === 'locale')!;
-      assert.equal(locale.status, 'skipped'); assert.equal(locale.attempts, 0); assert.equal(locale.estimatedCostUsd, 0);
+      assert.equal(locale.status, 'completed'); assert.equal(locale.attempts, 1);
       assert.equal(audit.workers.find(worker => worker.agent === 'formatting')?.status, 'skipped');
       assert.equal(audit.workers.find(worker => worker.agent === 'brand-voice')?.status, 'skipped');
       assert.deepEqual(audit.coverage.filter(entry => entry.implemented).map(entry => entry.category), ['spelling_grammar', 'formatting', 'links', 'locale_rules', 'brand_voice', 'translation_quality', 'terminology', 'media']);

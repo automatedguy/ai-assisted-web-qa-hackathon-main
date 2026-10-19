@@ -81,13 +81,13 @@ test('locale and formatting workflow with alternate profiles and a local model',
       findings = [finding('currency', 'USD 19.99'), finding('currency_format', 'USD 19.99'), finding('measurement_units', '2 lb'),
         finding('currency_format', '¥20.50'), finding('date_format', '14/03/2026')];
       const audit = await run();
-      assert.equal(worker(audit).status, 'completed'); assert.equal(worker(audit).issueCount, 3);
+      assert.equal(worker(audit).status, 'completed'); assert.equal(worker(audit).issueCount, 2);
       assert.deepEqual(worker(audit).categories, ['formatting']);
       assert.equal(localeWorker(audit).status, 'completed'); assert.equal(localeWorker(audit).issueCount, 2);
       assert.equal(worker(audit).estimatedCostUsd, 0.00018);
       assert.equal(received.targetLocale, 'ja-JP');
       assert.deepEqual(received.checkedDates, ['14/03/2026']);
-      assert.deepEqual(audit.issues.map(issue => issue.category).sort(), ['formatting', 'formatting', 'formatting', 'locale_rules', 'locale_rules']);
+      assert.deepEqual(audit.issues.map(issue => issue.category).sort(), ['formatting', 'formatting', 'locale_rules', 'locale_rules']);
       assert(audit.issues.every(issue => audit.crawl!.pages[0].text.includes(issue.evidence)));
       assert.equal(audit.issues.find(issue => issue.evidence === '14/03/2026')?.expected, '2026-03-14');
       assert.deepEqual(audit.issues.find(issue => issue.evidence === '14/03/2026')?.assessment, {
@@ -116,8 +116,8 @@ test('locale and formatting workflow with alternate profiles and a local model',
     });
     await t.test('does not infer policies when optional rules are absent', async () => {
       await setup({ target_locale: 'de-DE' }, '<p>03/14/2026 $19.99 2 lb</p>');
-      const audit = await run(); assert.equal(localeCalls, 0); assert.deepEqual(audit.issues, []);
-      assert.equal(worker(audit).status, 'skipped'); assert.equal(localeWorker(audit).status, 'skipped'); assert.equal(worker(audit).estimatedCostUsd, 0);
+      const audit = await run(); assert.equal(localeCalls, 1); assert.deepEqual(audit.issues, []);
+      assert.equal(worker(audit).status, 'skipped'); assert.equal(localeWorker(audit).status, 'completed'); assert.equal(worker(audit).estimatedCostUsd, 0);
     });
     await t.test('rejects unconfigured rules and invented evidence but keeps deterministic dates', async () => {
       for (const invalid of [finding('measurement_units', '2 lb'), finding('date_format', 'fabricated text')]) {

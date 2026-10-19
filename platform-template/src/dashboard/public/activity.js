@@ -25,7 +25,8 @@ const displayStatus = worker => worker.status === 'skipped' && worker.agent === 
 export function workerActivity(worker) {
   const subject = `${nameOf(worker)} · ${pageOf(worker)}`;
   if (worker.status === 'queued') return `${subject}: waiting to start.`;
-  if (worker.status === 'running') return `${subject}: reviewing${worker.attempts > 1 ? ` (attempt ${worker.attempts})` : ''}.`;
+  const requestAttempt = worker.requestAttempt ?? worker.attempts;
+  if (worker.status === 'running') return `${subject}: reviewing${requestAttempt > 1 ? ` (attempt ${requestAttempt})` : ''}.`;
   if (displayStatus(worker) === 'not applicable') return `${subject}: not applicable — no images or videos on this page.`;
   if (worker.status === 'skipped') return `${subject}: skipped. ${worker.message || 'This check did not run.'}`;
   if (worker.status === 'failed' || worker.status === 'partial') {
@@ -61,6 +62,7 @@ export function activitySummary(run) {
   if (unrun) warnings.push(`${count(unrun, 'category')} not run`);
   if (run.crawl?.errors.length || run.crawl?.limitReached || (run.status === 'partial' && !failed)) warnings.push('Crawl or check coverage incomplete');
   if (run.status === 'failed') warnings.unshift('Run failed');
+  if (run.browserCoverage?.some(entry => entry.status !== 'completed')) warnings.push('Browser-state coverage incomplete or disabled');
   const title = linksOnly ? 'Link check' : 'Audit';
   const state = running ? 'running' : run.status === 'completed' ? 'complete' : run.status === 'failed' ? 'failed' : 'finished with incomplete checks';
   return {
@@ -165,10 +167,12 @@ export function createActivityView(document, onViewFindings = () => {}) {
       if (run?.error) attention.unshift(run.error);
       if (run?.crawl?.errors.length) attention.push(...run.crawl.errors.map(error => 'Crawl: ' + error.url + ' · ' + error.message));
       if (run?.crawl?.limitReached) attention.push('Crawl limit reached. Some pages were not checked.');
+      for (const entry of run?.browserCoverage || []) if (entry.status !== 'completed') attention.push('Browser coverage · ' + entry.pageUrl + ': ' + entry.limitations.join(' '));
       if (summary.attention && !attention.length) attention.push(summary.attention);
       updateList('#panel-attention-items', attention);
       $('#panel-attention').hidden = !attention.length;
       updateList('#activity-coverage', summary.coverage.map(entry => `${entry.label} — ${entry.text}`));
+      updateList('#activity-browser-coverage', (run?.browserCoverage || []).map(entry => `${entry.pageUrl} · ${entry.states} states captured · ${entry.status}\n${entry.limitations.join(' ')}`));
       const input = workers.reduce((sum, worker) => sum + worker.inputTokens, 0);
       const output = workers.reduce((sum, worker) => sum + worker.outputTokens, 0);
       const known = workers.length && workers.every(worker => worker.estimatedCostUsd !== null && worker.usageComplete);

@@ -1,6 +1,28 @@
 # Project Handoff
 
-Updated: 2026-10-15. Implementation: Media milestone plus dashboard activity and reset controls.
+Updated: 2026-10-19. Implementation: eight specialized agents, activity explanations,
+bounded browser-state checks, semantic links and catalog regression tooling.
+
+## Catalog implementation validation (2026-10-19)
+
+- TypeScript checks and all 68 offline tests pass.
+- `npm run test:catalog-browser` captured 37 desktop/mobile states across the three
+  practice pages and verified generated singular/empty copy, all three mobile-menu
+  accessible names, four sorted-date defects, responsive resources and screenshot replay.
+- The activity-panel desktop/mobile regression also passes.
+- The authorized live test (`eb41d5a6-2c1f-4d2f-99a5-824a4ad916e0`) detected
+  25/25 catalog cases in 111 seconds with 32 findings and no worker failures.
+- A subsequent dashboard run (`8183342d-8a3c-49a4-a8ee-5174953ea315`) also detected
+  25/25 cases in 108 seconds with 33 findings and no worker failures. Both found
+  all three mobile-menu occurrences and all four sorted-date defects.
+- Case matching is not certification of correction quality or unseen-site accuracy.
+  The dashboard run exposed a grouped currency-format duplicate retaining dollar
+  symbols, alongside the correct per-plan euro fixes. Follow-up work: reconcile
+  grouped findings, stabilize media IDs across model wording changes, and improve
+  screenshot reliability and Business-row highlighting. Subtitle findings have
+  textual evidence but no highlighted rendered element. One non-catalog translation
+  finding also varied between major and minor severity across these runs.
+- Production code does not import the catalog; its examples are test-only.
 Use Git history to identify the current commit and publication status.
 Remote: https://github.com/automatedguy/ai-assisted-web-qa-hackathon-main.
 Check Git status and recent commits before continuing; this is a point-in-time snapshot.
@@ -26,7 +48,8 @@ The demo replaces the practice site and profile with unseen inputs, without code
 
 All eight categories are implemented under a shared coordinator with eight agents:
 Spelling & Grammar, Links, Locale, Formatting, Brand Voice, Terminology, Translation Quality and Media.
-Links and numeric-date checks are deterministic. Media combines deterministic
+HTTP/fragment and numeric-date checks are deterministic; Links also uses a model
+for destination meaning. Media combines deterministic
 resource/metadata checks with model-based caption, alt text and image inspection.
 
 | Component | Location and behavior |
@@ -44,7 +67,8 @@ resource/metadata checks with model-based caption, alt text and image inspection
 | Translation Quality | `src/agents/translation-quality.ts`: source/target meaning comparison; `reference-content.ts`: mapped Markdown loading within the configured directory |
 | Media | `src/agents/media.ts`: resource/metadata and visual/language checks; `media-resources.ts`: bounded fetches, image signatures and basic WebVTT extraction |
 | Shared model client | `src/agents/model-check.ts`: structured outputs, retries, exact evidence, token/cost tracking |
-| Links | `src/agents/links.ts`: reports fetched same-origin destinations returning HTTP errors |
+| Links | `src/agents/links.ts`: HTTP/fragment checks and validated anchor/destination semantic review |
+| Browser evidence | `src/crawler/rendered.ts`: bounded desktop/mobile state capture; `src/agents/rendered-checks.ts`: existing category agents review captured copy and dates |
 | Issue contract | `docs/ISSUE_SCHEMA.json`, with TypeScript types in `src/issues.ts` |
 | Dashboard | `src/dashboard/public/`: compact activity bar, optional activity panel, category filtering, review actions and Clear results |
 
@@ -83,7 +107,9 @@ findings, model, and token usage; completion events are logged as JSON.
 
 Locale/Formatting makes one additional model request per successful page with
 applicable explicit rules. Missing optional policies are not inferred from the
-target locale; the worker skips when no relevant policies exist. It checks date,
+target locale; Formatting skips when no relevant policies exist, while Locale
+always checks target-language copy. Captured state batches add interface and
+accessible-name reviews to the existing agents. It checks date,
 number and currency notation, physical units, currency identity, and configured
 address/phone/capitalization rules. See the platform README for supported fields.
 Numeric date findings survive a failed model step while the worker remains failed.
@@ -225,7 +251,12 @@ ChatGPT account does not change the application's `.env` API credential.
   audit trail exists. Matching findings preserve statuses only within that session.
 - Audits deliberately show `partial` while categories are missing, workers fail,
   or crawl coverage is incomplete.
-- Links does not yet assess external links, wrong-locale destinations, or anchor meaning.
+- Links does not assess external links or run a dedicated destination-language check.
+- Browser exploration covers independent discovered controls at two viewports, not
+  every interaction combination, authenticated flow or submission. State/timeout
+  limits and browser failures are exposed in `browserCoverage`. See platform README
+  for configuration and catalog test commands. Mock tests do not establish 25/25
+  live-model accuracy; the explicit paid catalog audit measures case matching.
 - Model-based page checks fail visibly above 24,000 characters; chunking is pending.
 - Contextual locale checks depend on model judgment; numeric-date recognition is
   heuristic. Raw HTML markup, rendered layout and whitespace checks remain pending.
@@ -249,7 +280,7 @@ ChatGPT account does not change the application's `.env` API credential.
 2. Record review status changes with timestamps and expose past runs in the dashboard.
 3. Test restart recovery and run isolation, then validate Docker Compose end to end.
 
-Following milestones: Links expansion and a full unseen-input demo rehearsal.
+Following milestones: broader link/state coverage and a full unseen-input demo rehearsal.
 
 ## Git and Session Continuity
 

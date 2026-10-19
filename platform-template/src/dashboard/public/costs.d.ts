@@ -1,0 +1,12 @@
+export type Pricing = { model: string; input: number; cachedInput: number; cacheWrite: number; output: number; source: string; sourceUrl?: string };
+export type CostUsage = { inputTokens: number; outputTokens: number; cachedInputTokens?: number; cacheWriteInputTokens?: number;
+  cacheUsageComplete?: boolean; usageComplete: boolean; modelCalls?: number; model?: string; estimatedCostUsd?: number | null; pricing?: Pricing | null };
+export type Estimate = { usd: number | null; inputUsd?: number; outputUsd?: number; partial: boolean; cacheApproximate: boolean; recorded?: boolean };
+export const pricingSource: string;
+export function defaultPricing(model?: string): Pricing | null;
+export function parseRate(value: unknown): number | null;
+export function validPricing(pricing: unknown): boolean;
+export function workerCost(worker: CostUsage, pricing?: Pricing | null): Estimate;
+export function workerPricing(worker: CostUsage, runPricing?: Pricing | null, overrides?: Record<string, Pricing>): Pricing | null;
+export function runCost(run?: { workers: CostUsage[]; pricing?: Pricing | null } | null, overrides?: Record<string, Pricing>): Estimate & { unpriced: number; input: number; output: number };
+export function costLabel(estimate: Estimate): string;

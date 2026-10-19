@@ -1,3 +1,5 @@
+import { costLabel, runCost, workerCost, workerPricing } from './costs.js';
+
 export const agentCatalog = [
   { id: 'spelling-grammar', category: 'spelling_grammar', name: 'Spelling & Grammar',
     scope: 'Spelling, punctuation and grammatical agreement in the target locale.', limit: 'Model judgments require human review.' },
@@ -126,7 +128,7 @@ export function createAgentCards(document, onViewFindings) {
   }
   return {
     reset() { cards.clear(); list.replaceChildren(); },
-    render(run) {
+    render(run, pricingOverrides = {}) {
       for (const agent of agentCatalog) {
         let card = cards.get(agent.id);
         if (!card) { card = create(agent); cards.set(agent.id, card); }
@@ -140,6 +142,7 @@ export function createAgentCards(document, onViewFindings) {
         if (data.failed) counts.push(data.failed + ' failed');
         if (data.skipped) counts.push(data.skipped + ' skipped');
         if (data.notApplicable) counts.push(data.notApplicable + ' not applicable');
+        if (data.workers.length) counts.push(costLabel(runCost({ workers: data.workers, pricing: run?.pricing }, pricingOverrides)));
         set(card.progress, data.workers.length ? counts.join(' · ') : 'No checks have run.');
         set(card.active, data.active.map(w => path(w) + ' · ' + (w.stage || 'Reviewing page') +
           ((w.requestAttempt ?? w.attempts) > 1 ? ' · attempt ' + (w.requestAttempt ?? w.attempts) : '')).join('\n'));
@@ -162,10 +165,12 @@ export function createAgentCards(document, onViewFindings) {
         for (const [id, entry] of card.findingNodes) if (!ids.has(id)) { entry.details.remove(); card.findingNodes.delete(id); }
         data.findings.forEach(issue => renderFinding(card, issue));
         set(card.diagnosticText, data.workers.length ? data.workers.map(w => {
-          const cost = Number.isFinite(w.estimatedCostUsd) && w.usageComplete ? '$' + w.estimatedCostUsd.toFixed(5) : 'unavailable';
+          const estimate = workerCost(w, workerPricing(w, run?.pricing, pricingOverrides));
+          const cost = costLabel(estimate);
           return path(w) + ' · ' + duration(w.durationMs) + ' · ' + count(w.attempts, 'attempt') + '\n' +
             (w.model || 'No model call recorded') + ' · Tokens: ' + (w.inputTokens ?? 'unavailable') + ' in / ' + (w.outputTokens ?? 'unavailable') + ' out · Cost: ' + cost +
             (!w.usageComplete ? ' · Usage incomplete' : '') +
+            (estimate.cacheApproximate ? ' · Cache split incomplete; estimate uses known cache counts' : '') +
             (w.startedAt ? '\nStarted: ' + w.startedAt : '') + (w.finishedAt ? '\nFinished: ' + w.finishedAt : '') +
             (w.mediaChecks?.length ? '\n' + w.mediaChecks.map(c => c.check + ' · ' + c.status + ' · ' + c.asset + ' · ' + c.message).join('\n') : '');
         }).join('\n\n') : 'No execution data yet.');

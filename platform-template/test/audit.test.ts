@@ -40,7 +40,8 @@ test('audit workflow with an unseen profile and simulated model', async t => {
       response.end(JSON.stringify({
         id: 'resp_mock', object: 'response', status: 'completed', model: 'mock-model',
         output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: JSON.stringify({ issues }), annotations: [] }] }],
-        usage: { input_tokens: 100, output_tokens: 20, total_tokens: 120 },
+        usage: { input_tokens: 100, output_tokens: 20, total_tokens: 120,
+          input_tokens_details: { cached_tokens: 40, cache_write_tokens: 10 } },
       })); return;
     }
     response.writeHead(request.url === '/missing' ? 404 : 200, { 'content-type': 'text/html' });
@@ -79,6 +80,10 @@ test('audit workflow with an unseen profile and simulated model', async t => {
       assert.equal(calls, 1);
       const language = audit.workers.find(worker => worker.agent === 'spelling-grammar')!;
       assert.equal(language.inputTokens, 100); assert.equal(language.estimatedCostUsd, 0.00014);
+      assert.equal(language.cachedInputTokens, 40); assert.equal(language.cacheWriteInputTokens, 10);
+      assert.equal(language.cacheUsageComplete, true);
+      assert.equal(audit.cost?.partial, false); assert(audit.cost!.usd! > 0);
+      assert.equal(audit.pricing?.input, 1); assert.equal(language.pricing?.output, 2);
       audit.issues[0].status = 'verified';
       const second = createAudit(); await executeAudit(second, origin, 'mock-model', audit.issues);
       assert.equal(second.issues.find(issue => issue.id === audit.issues[0].id)?.status, 'verified');

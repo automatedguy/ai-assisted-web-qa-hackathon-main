@@ -2,6 +2,8 @@ import OpenAI from "openai";
 import { Ajv } from "ajv";
 import { setTimeout as delay } from "node:timers/promises";
 import type { AgentContext } from "./types.js";
+import { configuredPricing } from "../costs.js";
+import { workerCost } from "../dashboard/public/costs.js";
 
 const findingSchema = {
   type: "object", additionalProperties: false,
@@ -23,12 +25,6 @@ export type Findings = { issues: Array<{
   asset_id?: string; check?: "alt_language" | "image_content" | "image_text" | "caption_language";
   element_id?: string; destination_evidence?: string;
 }> };
-function rate(name: string): number | null {
-  const raw = process.env[name];
-  if (!raw?.trim()) return null;
-  const value = Number(raw);
-  return Number.isFinite(value) && value >= 0 ? value : null;
-}
 type Options = {
   name: string; instructions: string; input: unknown; ruleIds?: string[]; sourceText?: string;
   images?: Array<{ id: string; dataUrl: string }>;
@@ -68,8 +64,7 @@ export async function requestFindings({ page, model, report }: AgentContext, opt
   const client = new OpenAI({ maxRetries: 0, timeout: 60000 });
   report.model = model;
   report.estimatedCostUsd = null;
-  const inputRate = rate("OPENAI_INPUT_USD_PER_MILLION");
-  const outputRate = rate("OPENAI_OUTPUT_USD_PER_MILLION");
+  if (report.pricing === undefined) report.pricing = configuredPricing(model);
   for (let attempt = 1; attempt <= 2; attempt++) {
     report.modelCalls = (report.modelCalls ?? 0) + 1;
     report.attempts = report.modelCalls;
@@ -99,10 +94,16 @@ export async function requestFindings({ page, model, report }: AgentContext, opt
     if (result.usage) {
       report.inputTokens += result.usage.input_tokens;
       report.outputTokens += result.usage.output_tokens;
+      const details = result.usage.input_tokens_details as { cached_tokens?: number; cache_write_tokens?: number } | undefined;
+      const cached = details?.cached_tokens, written = details?.cache_write_tokens;
+      const validCached = typeof cached === "number" && Number.isSafeInteger(cached) && cached >= 0;
+      const validWritten = typeof written === "number" && Number.isSafeInteger(written) && written >= 0;
+      const validSplit = (validCached ? cached : 0) + (validWritten ? written : 0) <= result.usage.input_tokens;
+      report.cachedInputTokens = (report.cachedInputTokens ?? 0) + (validSplit && validCached ? cached : 0);
+      report.cacheWriteInputTokens = (report.cacheWriteInputTokens ?? 0) + (validSplit && validWritten ? written : 0);
+      report.cacheUsageComplete = (report.cacheUsageComplete ?? true) && validCached && validWritten && validSplit;
     } else report.usageComplete = false;
-    if (inputRate !== null && outputRate !== null && report.usageComplete) {
-      report.estimatedCostUsd = (report.inputTokens * inputRate + report.outputTokens * outputRate) / 1e6;
-    }
+    report.estimatedCostUsd = report.usageComplete ? workerCost(report, report.pricing).usd : null;
     report.stage = "Validating response and evidence";
     if (result.status !== "completed") throw new Error("Model response incomplete; no findings accepted.");
     let parsed: unknown;

@@ -26,8 +26,9 @@ const makeRun = () => ({
     status: agent.id === 'locale' ? 'running' : agent.id === 'media' ? 'skipped' : 'completed',
     stage: 'Reviewing content with model', attempts: 1, issueCount: agent.id === 'locale' ? 1 : 0,
     message: agent.id === 'media' ? 'No image or video elements found.' : undefined,
-    inputTokens: 100, outputTokens: 25, estimatedCostUsd: 0.0001, usageComplete: true,
-    durationMs: 500, model: 'fixture-model', startedAt: new Date().toISOString(),
+    inputTokens: 100, outputTokens: 25, estimatedCostUsd: null, usageComplete: true,
+    cachedInputTokens: 0, cacheWriteInputTokens: 0, cacheUsageComplete: true,
+    durationMs: 500, model: 'gpt-6-astra', startedAt: new Date().toISOString(),
     rules: agent.id === 'locale' ? [{ id: 'measurement_units', value: 'metric' }] : [],
   })),
 });
@@ -73,12 +74,37 @@ try {
     assert.equal(await locale.locator('.agent-finding').getAttribute('open'), '');
     assert.equal(await locale.locator('.agent-finding > summary').evaluate(el => el === document.activeElement), true);
     assert.equal(await page.locator('.activity-panel-body').evaluate(el => el.scrollTop), scrollBefore);
+    // Existing runs can be estimated immediately; edits remain intact during polling.
+    assert.match(await page.locator('#panel-cost').innerText(), /\$0\.01800 estimated so far/);
+    await page.locator('#run-cost-calculator > summary').click();
+    assert.equal(await page.locator('#cost-rate-input').inputValue(), '10');
+    await page.locator('#cost-rate-input').fill('20');
+    await page.locator('#cost-rate-output').fill('100');
+    const costSnapshots = snapshots;
+    await page.waitForTimeout(1200);
+    assert(snapshots > costSnapshots);
+    assert.equal(await page.locator('#cost-rate-input').inputValue(), '20');
+    await page.locator('#cost-rates button[type="submit"]').click();
+    assert.match(await page.locator('#panel-cost').innerText(), /\$0\.03600/);
+    assert.match(await locale.locator('.agent-diagnostics').textContent(), /Cost: \$0\.00450 estimated/);
+    await page.locator('#cost-run-count').fill('10');
+    assert.match(await page.locator('#cost-projection').innerText(), /\$0\.36000 for 10 similar runs/);
+    await page.locator('#cost-rate-input').fill('');
+    assert.equal(await page.locator('#cost-rate-input').evaluate(el => el.checkValidity()), false);
+    await page.locator('#cost-reset').click();
+    assert.match(await page.locator('#panel-cost').innerText(), /\$0\.01800/);
+    assert.match(await page.locator('#cost-projection').innerText(), /\$0\.18000/);
+    assert.equal(await page.locator('.activity-panel-body').evaluate(el => el.scrollWidth <= el.clientWidth), true);
+    await page.screenshot({ path: join(screenshotDirectory, `${viewport.width}-costs.png`) });
+    await page.locator('#run-cost-calculator > summary').click();
     // Failure remains conspicuous alongside retained evidence and neutral no-media skips.
     const localeWorker = run.workers.find(worker => worker.agent === 'locale');
-    Object.assign(localeWorker, { status: 'failed', message: 'Second request failed; first finding retained.', finishedAt: new Date().toISOString() });
+    Object.assign(localeWorker, { status: 'failed', usageComplete: false, message: 'Second request failed; first finding retained.', finishedAt: new Date().toISOString() });
     run.status = 'partial'; run.durationMs = 4000;
     await page.waitForFunction(() => !document.querySelector('#panel-attention').hidden);
     assert.match(await page.locator('#panel-attention').innerText(), /Second request failed/);
+    assert.match(await page.locator('#panel-cost').innerText(), /known-usage subtotal/);
+    assert.match(await page.locator('#cost-warning').textContent(), /Incomplete estimate/);
     assert.doesNotMatch(await page.locator('#panel-attention').innerText(), /no images or videos/i);
     assert.match(await locale.locator('.agent-badge').innerText(), /Needs attention/);
     assert.match(await page.locator('#panel-metrics').innerText(), /1 page loaded · 6\/8 checks completed/);
@@ -118,6 +144,17 @@ try {
     await locale.locator('.agent-finding > summary').click();
     assert.match(await locale.locator('.agent-evidence').innerText(), /Not recorded for this finding/);
     assert.doesNotMatch(await locale.locator('.agent-evidence').innerText(), /measurement_units/);
+    // Unknown models never inherit Astra prices, but can be priced explicitly.
+    run.workers.forEach(worker => { worker.model = 'custom-model'; worker.usageComplete = true; });
+    await page.reload();
+    await page.locator('#view-activity').click();
+    await page.waitForFunction(() => document.querySelector('#cost-basis').textContent.includes('custom-model'));
+    assert.match(await page.locator('#panel-cost').innerText(), /Unavailable/);
+    await page.locator('#run-cost-calculator > summary').click();
+    assert.equal(await page.locator('#cost-rate-input').inputValue(), '');
+    for (const id of ['input', 'cached', 'write', 'output']) await page.locator('#cost-rate-' + id).fill('0');
+    await page.locator('#cost-rates button[type="submit"]').click();
+    assert.match(await page.locator('#panel-cost').innerText(), /\$0\.00000 estimated/);
     await page.keyboard.press('Escape');
     await page.locator('#clear').click();
     await page.locator('#view-activity').click();
@@ -128,6 +165,6 @@ try {
     assert.deepEqual(errors, []);
     await page.close();
   }
-  console.log('Activity panel checks passed: desktop/mobile, polling, evidence, filters, focus and reset.');
+  console.log('Activity panel checks passed: desktop/mobile, cost calculator, polling, evidence, filters, focus and reset.');
   console.log('Screenshots:', screenshotDirectory);
 } finally { await browser.close(); }

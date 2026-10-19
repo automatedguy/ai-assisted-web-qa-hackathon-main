@@ -30,6 +30,7 @@
       <p id="activity-detail">Run an audit or check links to get started.</p>
       <p id="activity-attention" aria-live="polite" hidden></p>
       <p id="activity-note" aria-live="polite" hidden></p>
+      <p id="activity-cost"></p>
     </div>
     <button id="view-activity" type="button" aria-haspopup="dialog" aria-controls="activity-panel" aria-expanded="false">View activity <span aria-hidden="true">→</span></button>
   </section>
@@ -57,7 +58,7 @@
 </main>
 <dialog id="activity-panel" aria-labelledby="activity-heading">
   <header class="activity-panel-header">
-    <div><h2 id="activity-heading">Agent activity</h2><p id="panel-status">Ready to check your site</p><p id="panel-metrics"></p><p id="panel-phase"></p></div>
+    <div><h2 id="activity-heading">Agent activity</h2><p id="panel-status">Ready to check your site</p><p id="panel-metrics"></p><p id="panel-phase"></p><p id="panel-cost"></p></div>
     <button id="close-activity" type="button" autofocus>Close <span aria-hidden="true">×</span></button>
   </header>
   <div class="activity-panel-body">
@@ -81,7 +82,29 @@
     </details>
     <details class="activity-disclosure"><summary>Check coverage</summary><ul id="activity-coverage" class="activity-list"></ul></details>
     <details class="activity-disclosure"><summary>Browser-state coverage</summary><ul id="activity-browser-coverage" class="activity-list"></ul></details>
-    <details class="activity-disclosure"><summary>Run usage</summary><p id="activity-usage">No usage yet.</p></details>
+    <details class="activity-disclosure" id="run-cost-calculator">
+      <summary>Run usage &amp; cost calculator</summary>
+      <p id="activity-usage">No usage yet.</p>
+      <p><strong id="cost-total">No run yet</strong></p>
+      <p id="cost-basis" class="activity-muted"></p>
+      <p id="cost-warning" class="cost-warning"></p>
+      <form id="cost-rates">
+        <fieldset id="cost-rate-fields" disabled>
+          <legend>USD per 1 million tokens</legend>
+          <div class="cost-rate-grid">
+            <label>Regular input<input id="cost-rate-input" type="number" min="0" step="any" required></label>
+            <label>Cached input<input id="cost-rate-cached" type="number" min="0" step="any" required></label>
+            <label>Cache writes<input id="cost-rate-write" type="number" min="0" step="any" required></label>
+            <label>Output<input id="cost-rate-output" type="number" min="0" step="any" required></label>
+          </div>
+          <div class="cost-actions"><button type="submit">Apply rates</button><button type="button" id="cost-reset">Use recorded/default rates</button></div>
+        </fieldset>
+        <p id="cost-error" role="alert"></p>
+      </form>
+      <label class="cost-run-label">Similar runs to budget for<input id="cost-run-count" type="number" min="1" max="10000" step="1" value="1"></label>
+      <p id="cost-projection" aria-live="polite"></p>
+      <p class="activity-muted">Estimates, not invoices. Assumes the displayed rates and the same reported token usage per run; a running audit shows usage so far, not a forecast of unfinished work. Excludes long-context, service-tier and regional adjustments, taxes and non-token charges. Custom rates affect this tab only. <a href="https://developers.openai.com/api/docs/pricing" target="_blank" rel="noopener noreferrer">Check current API pricing</a>.</p>
+    </details>
   </div>
 </dialog>
 </body></html>

@@ -14,6 +14,8 @@ import { mediaAgent } from "../agents/media.js";
 import { WorkerFailure } from "../agents/types.js";
 import type { Agent, WorkerRun } from "../agents/types.js";
 import { captureIssueScreenshots } from "../visual-evidence.js";
+import { configuredPricing } from "../costs.js";
+import { runCost, type Pricing } from "../dashboard/public/costs.js";
 
 const agents: Agent[] = [
   linksAgent,
@@ -31,6 +33,8 @@ export type Audit = {
   targetLocale?: string; crawl?: CrawlResult; workers: WorkerRun[]; issues: QaIssue[];
   coverage: Array<{ category: QaIssue["category"]; implemented: boolean }>;
   error?: string;
+  pricing?: Pricing | null;
+  cost?: ReturnType<typeof runCost>;
   browserCoverage?: Array<{ pageUrl: string; status: string; states: number; limitations: string[] }>;
 };
 export function createAudit(): Audit {
@@ -41,6 +45,7 @@ export function createAudit(): Audit {
 }
 export async function executeAudit(audit: Audit, siteUrl: string, model: string, previous: QaIssue[]) {
   const started = Date.now();
+  audit.pricing = configuredPricing(model);
   try {
     const profile = await loadProfile();
     const validateIssue = await loadIssueValidator();
@@ -61,7 +66,8 @@ export async function executeAudit(audit: Audit, siteUrl: string, model: string,
       const report: WorkerRun = {
         id: randomUUID(), agent: agent.id, categories: agent.categories, pageUrl: page?.url,
         status: "queued", attempts: 0, durationMs: 0, issueCount: 0,
-        inputTokens: 0, outputTokens: 0, estimatedCostUsd: agent.id === "links" ? 0 : null, usageComplete: true,
+        inputTokens: 0, outputTokens: 0, modelCalls: 0, estimatedCostUsd: agent.id === "links" ? 0 : null, usageComplete: true,
+        pricing: audit.pricing,
         rules: (policyRules[agent.id as keyof typeof policyRules] ?? []).map(rule => ({
           id: rule.id, value: typeof rule.value === "string" ? rule.value : JSON.stringify(rule.value),
         })),
@@ -124,5 +130,6 @@ export async function executeAudit(audit: Audit, siteUrl: string, model: string,
     audit.error = error instanceof Error ? error.message : "Audit failed.";
   } finally {
     audit.finishedAt = new Date().toISOString(); audit.durationMs = Date.now() - started;
+    audit.cost = runCost(audit);
   }
 }

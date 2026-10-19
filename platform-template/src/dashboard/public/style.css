@@ -169,6 +169,17 @@ button:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visib
 .timeline-controls button { margin: 0; }
 @keyframes activity-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .activity-dot { animation: none !important; } button { transition: none; } }
+.cost-rate-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.cost-rate-grid label, .cost-run-label { display: grid; gap: 6px; font-size: 13px; }
+.cost-rate-grid input, .cost-run-label input { width: 100%; min-width: 0; box-sizing: border-box; padding: 9px; border: 1px solid #b8c1cc; border-radius: 6px; background: white; color: #17212b; }
+#cost-rate-fields { min-width: 0; margin: 12px 0; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; }
+#cost-rate-fields legend { font-weight: 600; font-size: 13px; }
+.cost-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.cost-run-label { max-width: 240px; }
+.cost-warning, #cost-error { color: #8a4500; font-size: 13px; }
+#panel-cost, #activity-cost { font-weight: 600; }
+#cost-basis, #cost-warning { overflow-wrap: anywhere; }
+
 @media (max-width: 600px) {
   main { padding: 0 16px; }
   .brand-inner { gap: 16px; padding: 20px 16px; }

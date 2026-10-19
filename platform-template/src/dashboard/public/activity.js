@@ -1,4 +1,5 @@
 import { agentCatalog, createAgentCards, needsAttention } from './activity-cards.js';
+import { createCostView } from './cost-view.js';
 
 export const categoryNames = {
   spelling_grammar: 'Spelling and grammar', formatting: 'Formatting', links: 'Links',
@@ -88,6 +89,8 @@ export function createActivityView(document, onViewFindings = () => {}) {
     else trigger.focus();
   });
   const cards = createAgentCards(document, category => { selectedFindings = category; panel.close(); });
+  let latestRun;
+  const costs = createCostView(document, () => cards.render(latestRun, costs.overrides()));
   let currentId;
   let previousWorkers = new Map();
   let previousPhase;
@@ -128,6 +131,7 @@ export function createActivityView(document, onViewFindings = () => {}) {
   });
   return {
     render(run) {
+      latestRun = run;
       const summary = activitySummary(run);
       $('#activity-bar').dataset.state = summary.tone;
       setText('#activity-status', summary.status); setText('#activity-detail', summary.detail);
@@ -157,7 +161,8 @@ export function createActivityView(document, onViewFindings = () => {}) {
       // Oldest first; new updates append without moving the reader's scroll position.
       renderTimeline();
       const workers = run?.workers || [];
-      cards.render(run);
+      costs.render(run);
+      cards.render(run, costs.overrides());
       $('#agents-empty').hidden = workers.length > 0;
       const completed = workers.filter(w => w.status === 'completed').length;
       const loadedPages = run?.crawl?.pages.filter(page => page.status >= 200 && page.status < 300).length || 0;
@@ -173,12 +178,6 @@ export function createActivityView(document, onViewFindings = () => {}) {
       $('#panel-attention').hidden = !attention.length;
       updateList('#activity-coverage', summary.coverage.map(entry => `${entry.label} — ${entry.text}`));
       updateList('#activity-browser-coverage', (run?.browserCoverage || []).map(entry => `${entry.pageUrl} · ${entry.states} states captured · ${entry.status}\n${entry.limitations.join(' ')}`));
-      const input = workers.reduce((sum, worker) => sum + worker.inputTokens, 0);
-      const output = workers.reduce((sum, worker) => sum + worker.outputTokens, 0);
-      const known = workers.length && workers.every(worker => worker.estimatedCostUsd !== null && worker.usageComplete);
-      const cost = known ? '$' + workers.reduce((sum, worker) => sum + worker.estimatedCostUsd, 0).toFixed(5) : 'unavailable';
-      setText('#activity-usage', run ? `Reported tokens: ${input} input / ${output} output · Estimated cost: ${cost}` +
-        (workers.some(worker => !worker.usageComplete) ? ' · Some usage is unknown.' : '') : 'No usage yet.');
     },
   };
 }

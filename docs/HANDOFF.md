@@ -5,8 +5,8 @@ bounded browser-state checks, semantic links and catalog regression tooling.
 
 ## Catalog implementation validation (2026-10-19)
 
-- TypeScript checks and all 86 offline tests pass, including media identity and
-  grouped-currency reconciliation regressions.
+- TypeScript checks and all 93 offline tests pass, including media identity,
+  grouped-currency reconciliation and cost-estimation regressions.
 - `npm run test:catalog-browser` captured 37 desktop/mobile states across the three
   practice pages and verified generated singular/empty copy, all three mobile-menu
   accessible names, four sorted-date defects, responsive resources and screenshot replay.
@@ -43,6 +43,16 @@ retaining 25/25 catalog cases, all three menu occurrences and four sorted dates.
 This was a replay of saved results, not a new paid audit or a dashboard mutation.
 Mock audit tests also verify source-backed corrections and final worker counts
 for grouped and individual responses.
+
+Cost follow-up: per-worker/per-agent estimates, a visible run total, editable
+per-model rates and a similar-run budget calculator are available in the activity
+panel. GPT-6 Astra has a dated official Standard short-context preset; environment
+overrides and unknown models are handled explicitly. New runs snapshot rates and
+capture cache-read/write counts; incomplete usage is labeled as a subtotal and
+missing cache details as approximate. Existing snapshots can be priced without
+API calls. Desktop/mobile fixtures verify rate editing, polling stability, reset,
+unknown models, zero rates and incomplete-usage warnings. See the platform README
+for billing exclusions and the preset's source/date. No paid audit was needed.
 
 Use Git history to identify the current commit and publication status.
 Remote: https://github.com/automatedguy/ai-assisted-web-qa-hackathon-main.
@@ -185,8 +195,10 @@ is reused without introducing a separate model or API credential.
 `REFERENCE_CONTENT_PATH` override local defaults. The reference directory defaults
 to `/data/reference-content` if mounted, otherwise the repository's reference directory.
 See `.env.example`. Optional `OPENAI_INPUT_USD_PER_MILLION` and
-`OPENAI_OUTPUT_USD_PER_MILLION` enable approximate cost reporting for that model;
-unknown rates/usage are displayed as unavailable, not zero.
+`OPENAI_OUTPUT_USD_PER_MILLION` override the dated GPT-6 Astra preset or price an
+unlisted model. Optional cached-input/cache-write rates are also supported.
+Unknown rates are not treated as free; incomplete usage produces a labeled
+known-usage subtotal. These estimates are not invoices.
 
 Alternatively, run `docker compose up --build` from the repository root. Compose
 starts both services and mounts profiles, reference content, and the issue schema.

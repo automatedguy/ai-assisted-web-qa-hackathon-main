@@ -48,7 +48,10 @@ The practice site must be running at `SITE_URL` (default http://localhost:8080).
   and media checks. **View findings** closes the panel and focuses that category.
   Disclosures stay open across updates, and the panel does not auto-scroll.
 - **Timeline** filters by agent and attention, with an explicit **Jump to latest**
-  button. **Check coverage** reports actual execution; **Run usage** shows totals.
+  button. **Check coverage** reports actual execution; **Run usage & cost calculator**
+  shows totals, editable token rates and a projection for multiple similar runs.
+  Worker diagnostics and agent summaries show estimates; the activity bar/panel
+  header show the run total (usage so far while running).
 - Activity descriptions come from the existing audit polling, with no additional
   model calls. The last 60 observed updates are kept in the current browser tab;
   timestamps indicate when an update was observed. Refreshing rebuilds the view
@@ -77,11 +80,36 @@ both services; free ports 8080 and 3000 first if already running separately.
 | `REFERENCE_CONTENT_PATH` | Reference directory; defaults to `/data/reference-content` when mounted, otherwise the repository's `reference-content/` |
 | `OPENAI_INPUT_USD_PER_MILLION` | Optional input token rate for the configured model |
 | `OPENAI_OUTPUT_USD_PER_MILLION` | Optional output token rate for the configured model |
+| `OPENAI_CACHED_INPUT_USD_PER_MILLION` | Optional cached-input rate; defaults to input rate with custom pricing |
+| `OPENAI_CACHE_WRITE_USD_PER_MILLION` | Optional cache-write rate; defaults to input rate with custom pricing |
 
-Set both rates to enable USD estimates. These use reported token counts at the
-configured rates, without cached-token discounts; they are not billing totals.
-Cost remains unavailable when rates or request usage are unknown. Docker
-Compose supplies mounted profile/schema paths and passes the rates through.
+With all rate variables blank, `gpt-6-astra` uses a dated Standard short-context
+preset: $10 input, $1 cached input, $12.50 cache writes and $50 output per million
+tokens, checked against [official pricing](https://developers.openai.com/api/docs/models/gpt-6-astra)
+on 2026-10-19. Other model names require custom rates; model aliases are not guessed.
+To override, set both input/output rates; cache overrides are optional. Partial or
+invalid configuration does not silently fall back to the preset. Zero is a valid rate.
+
+New runs snapshot their rates and record cache-read/write token counts when supplied.
+Calculation: `(regular input × input rate + cached input × cache rate + cache writes
+× write rate + output × output rate) / 1,000,000`. Cached and written tokens are
+subtracted from total input, not counted twice. Output already includes reasoning
+tokens. The final audit JSON includes a `cost` summary; the dashboard recalculates
+live totals with the same estimator. Unknown request usage (including uncertain
+retries) produces a labeled known-usage subtotal, not a complete estimate. Unpriced
+workers are explicitly disclosed. Missing cache details use the regular input rate
+for unclassified tokens and display a warning.
+
+The calculator can reprice a legacy run from its saved tokens without another API
+call. Custom calculator rates apply only to that model in the current tab, including
+subsequent runs; they do not modify `.env`, recorded audit data or API billing and
+are cleared by a browser reload. Reset restores recorded/default rates. Previously
+saved server estimates remain readable when their rates are unavailable. The
+similar-run projection multiplies reported usage, not a forecast of unfinished work.
+
+These are estimates, not invoices: long-context, service-tier, regional adjustments,
+taxes and non-token charges are excluded. Verify the dated preset before budgeting.
+Docker Compose supplies mounted profile/schema paths and passes all four rates through.
 Compose sets `REFERENCE_CONTENT_PATH=/data/reference-content` and mounts that
 directory read-only for Translation Quality checks.
 

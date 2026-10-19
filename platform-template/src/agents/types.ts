@@ -1,6 +1,7 @@
 import type { CrawlResult, CrawledPage } from "../crawler/crawl.js";
 import type { Profile } from "../config.js";
 import type { QaIssue } from "../issues.js";
+import type { Pricing } from "../dashboard/public/costs.js";
 
 export type WorkerRun = {
   id: string; agent: string; categories: QaIssue["category"][]; pageUrl?: string;
@@ -9,6 +10,8 @@ export type WorkerRun = {
   modelCalls?: number;
   requestAttempt?: number;
   inputTokens: number; outputTokens: number; estimatedCostUsd: number | null;
+  cachedInputTokens?: number; cacheWriteInputTokens?: number; cacheUsageComplete?: boolean;
+  pricing?: Pricing | null;
   usageComplete: boolean; model?: string; message?: string;
   startedAt?: string; finishedAt?: string; stage?: string;
   rules?: Array<{ id: string; value: string }>;

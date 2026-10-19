@@ -25,6 +25,7 @@ export function reconcileFindings(issues: QaIssue[]): QaIssue[] {
     const same = result.find(existing => {
       if (!issue.location.selector_or_xpath || existing.location.page_url !== issue.location.page_url || existing.location.selector_or_xpath !== issue.location.selector_or_xpath) return false;
       if (existing.reproduction?.attribute !== issue.reproduction?.attribute) return false;
+      if (existing.assessment?.check !== issue.assessment?.check) return false;
       const overlap = existing.evidence.includes(issue.evidence) || issue.evidence.includes(existing.evidence);
       const currencyOverlap = existing.assessment?.rule?.id === "currency" && issue.assessment?.rule?.id === "currency_format";
       // Never merge unrelated defects in the same paragraph, independent media resources or distinct state text.

@@ -24,6 +24,7 @@ test('media workflow fetches assets, submits image bytes and validates evidence'
   const profilePath = join(directory, 'profile.yaml');
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7ioAAAAASUVORK5CYII=', 'base64');
   const captions = 'WEBVTT\n\n00:00.000 --> 00:02.000\nWelcome to our team.\n';
+  let imageBytes = png; let captionData = captions;
   let html = ''; let mode = 'valid'; let mediaCalls = 0;
   let findings: Findings['issues'] = []; let received: any; let imageInputs: any[] = [];
   const fetched: string[] = []; let videoRange: string | undefined;
@@ -59,14 +60,14 @@ test('media workflow fetches assets, submits image bytes and validates evidence'
     }
     if (request.url === '/fake.png') { response.writeHead(200, { 'content-type': 'text/html' }); response.end('<p>Error page</p>'); return; }
     if (request.url === '/vector.svg') { response.writeHead(200, { 'content-type': 'image/svg+xml' }); response.end('<svg/>'); return; }
-    if (request.url?.endsWith('.png')) { response.writeHead(200, { 'content-type': 'image/png' }); response.end(png); return; }
+    if (request.url?.endsWith('.png')) { response.writeHead(200, { 'content-type': 'image/png' }); response.end(imageBytes); return; }
     if (request.url === '/video.mp4') {
       videoRange = request.headers.range;
       response.writeHead(206, { 'content-type': 'video/mp4' }); response.end(Buffer.from('000000186674797069736f6d', 'hex')); return;
     }
     if (request.url?.endsWith('.vtt')) {
       response.writeHead(200, { 'content-type': 'text/vtt' });
-      response.end(request.url === '/bad.vtt' ? 'WEBVTT\n\n00:03.000 --> 00:01.000\nBad' : captions); return;
+      response.end(request.url === '/bad.vtt' ? 'WEBVTT\n\n00:03.000 --> 00:01.000\nBad' : captionData); return;
     }
     response.writeHead(404); response.end();
   });
@@ -78,6 +79,7 @@ test('media workflow fetches assets, submits image bytes and validates evidence'
     OPENAI_INPUT_USD_PER_MILLION: '1', OPENAI_OUTPUT_USD_PER_MILLION: '2' });
   const setup = async (markup: string, targetLocale = 'fr-FR') => {
     mode = 'valid'; mediaCalls = 0; findings = []; received = undefined; imageInputs = []; fetched.length = 0; videoRange = undefined;
+    imageBytes = png; captionData = captions;
     process.env.OPENAI_API_KEY = 'mock'; html = `<html><body>${markup}</body></html>`;
     await writeFile(profilePath, stringify({ locale: { target_locale: targetLocale }, glossary: { do_not_translate: ['AsterBox'] } }));
   };
@@ -113,6 +115,73 @@ test('media workflow fetches assets, submits image bytes and validates evidence'
       assert.equal(audit.workers.length, 2); assert.equal(imageInputs.length, 3); assert.deepEqual(audit.issues, []);
       assert.equal(received.targetLocale, 'ja-JP');
       assert.deepEqual(audit.crawl!.pages[0].images[0].candidates, ['/desktop.png', '/wide.png', '/mobile.png'].map(path => origin + path));
+    });
+    await t.test('keeps media IDs and all review statuses across reworded evidence, corrections and reordered findings', async () => {
+      await setup('<img src="/ok.png" alt="Team photo"><video src="/video.mp4"><track src="/captions.vtt" srclang="fr"></video>');
+      findings = [finding('image-1-1', 'alt_language', 'Team photo'), finding('image-1-1', 'image_text', 'The image says Welcome.'),
+        finding('track-1-1', 'caption_language', 'Welcome to our team.')];
+      const first = await run(); assert.equal(first.status, 'completed');
+      first.issues.forEach((issue, index) => { issue.status = (['verified', 'dismissed', 'escalated'] as const)[index]; });
+      findings = findings.map((item, index) => ({ ...item, evidence: ['Team', 'English text is visible: Welcome.', 'our team.'][index],
+        description: 'Different explanation.', suggested_fix: 'Different correction.', expected: 'Different wording.', severity: 'major' as const, confidence: 0.88 })).reverse();
+      const second = await run(first.issues);
+      assert.equal(second.status, 'completed'); assert.equal(second.issues.length, 3);
+      assert.deepEqual(new Set(second.issues.map(issue => issue.id)), new Set(first.issues.map(issue => issue.id)));
+      for (const issue of second.issues) {
+        assert.match(issue.id, /^media-v2-[a-f0-9]{32}$/);
+        assert.equal(issue.status, first.issues.find(old => old.id === issue.id)!.status);
+        assert.equal(issue.description, 'Different explanation.');
+      }
+    });
+    await t.test('changed image bytes at the same URL and changed captions require fresh reviews', async () => {
+      await setup('<img src="/ok.png" alt="Team photo"><video src="/video.mp4"><track src="/captions.vtt" srclang="fr"></video>');
+      findings = [finding('image-1-1', 'image_text', 'English text'), finding('track-1-1', 'caption_language', 'Welcome')];
+      const first = await run(); first.issues.forEach(issue => { issue.status = 'dismissed'; });
+      // The fake model only needs a supported signature; change the fetched byte version.
+      imageBytes = Buffer.concat([png, Buffer.from('changed-image')]);
+      captionData = captions.replace('our team', 'our office');
+      const second = await run(first.issues);
+      assert.equal(second.status, 'completed'); assert.equal(second.issues.length, 2);
+      assert(second.issues.every(issue => issue.status === 'new' && !first.issues.some(old => old.id === issue.id)));
+    });
+    await t.test('changed alt text or target locale does not inherit a previous dismissal', async () => {
+      const markup = '<img src="/ok.png" alt="Team photo">';
+      await setup(markup); findings = [finding('image-1-1', 'alt_language', 'Team')];
+      const first = await run(); first.issues[0].status = 'dismissed';
+      html = html.replace('Team photo', 'Team portrait');
+      const changedAlt = await run(first.issues);
+      assert.notEqual(changedAlt.issues[0].id, first.issues[0].id); assert.equal(changedAlt.issues[0].status, 'new');
+      await setup(markup, 'es-ES'); findings = [finding('image-1-1', 'alt_language', 'Team')];
+      const changedLocale = await run(first.issues);
+      assert.notEqual(changedLocale.issues[0].id, first.issues[0].id); assert.equal(changedLocale.issues[0].status, 'new');
+    });
+    await t.test('separates elements, responsive assets and check types while consolidating one shared alt attribute', async () => {
+      await setup('<picture><source srcset="/mobile.png 600w"><img src="/desktop.png" alt="Team photo"></picture><img src="/desktop.png" alt="Team photo">');
+      findings = [finding('image-1-1', 'image_text', 'Welcome'), finding('image-1-2', 'image_text', 'Welcome'),
+        finding('image-2-1', 'image_text', 'Welcome'), finding('image-1-1', 'image_content', 'Welcome'),
+        finding('image-1-1', 'alt_language', 'Team photo'), finding('image-1-2', 'alt_language', 'Team photo')];
+      const audit = await run(); assert.equal(audit.status, 'completed');
+      assert.equal(audit.issues.length, 5); assert.equal(new Set(audit.issues.map(issue => issue.id)).size, 5);
+      assert.equal(audit.issues.filter(issue => issue.assessment?.check === 'alt_language').length, 1);
+    });
+    await t.test('preserves every observation when a model splits the same asset/check into multiple findings', async () => {
+      await setup('<img src="/ok.png" alt="">');
+      findings = [finding('image-1-1', 'image_text', 'English headline'),
+        { ...finding('image-1-1', 'image_text', 'Contradictory footer'), severity: 'major', confidence: 0.8 }];
+      const first = await run(); assert.equal(first.status, 'completed'); assert.equal(first.issues.length, 1);
+      assert.match(first.issues[0].evidence, /English headline/); assert.match(first.issues[0].evidence, /Contradictory footer/);
+      assert.equal(first.issues[0].severity, 'major'); assert.equal(first.issues[0].confidence, 0.8);
+      first.issues[0].status = 'verified'; findings.reverse();
+      const second = await run(first.issues);
+      assert.equal(second.issues[0].id, first.issues[0].id); assert.equal(second.issues[0].evidence, first.issues[0].evidence);
+      assert.equal(second.issues[0].status, 'verified');
+    });
+    await t.test('does not guess a review migration for legacy media IDs without content fingerprints', async () => {
+      await setup('<img src="/ok.png" alt="">'); findings = [finding('image-1-1', 'image_text', 'English copy')];
+      const first = await run();
+      const legacy = { ...first.issues[0], id: 'media-0123456789abcdef', status: 'dismissed' as const };
+      const second = await run([legacy]);
+      assert.equal(second.issues[0].status, 'new');
     });
     await t.test('reports missing alt, broken images/videos/tracks and malformed captions deterministically', async () => {
       await setup('<img src="/missing.png"><img src="/fake.png" alt=""><video src="/missing.mp4"><track src="/missing.vtt" srclang="fr"><track src="/bad.vtt" srclang="fr"></video>');

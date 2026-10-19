@@ -48,6 +48,7 @@
       "required": ["method"],
       "properties": {
         "method": { "enum": ["deterministic", "model_text", "model_visual"] },
+        "check": { "type": "string" },
         "rule": {
           "type": "object", "required": ["id", "value"],
           "properties": { "id": { "type": "string" }, "value": { "type": "string" } }

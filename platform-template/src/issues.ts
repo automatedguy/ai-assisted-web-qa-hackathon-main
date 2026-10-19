@@ -32,6 +32,7 @@ export type QaIssue = {
   reproduction?: Reproduction;
   assessment?: {
     method: "deterministic" | "model_text" | "model_visual";
+    check?: string;
     rule?: { id: string; value: string };
   };
   evidence: string;

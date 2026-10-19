@@ -5,7 +5,7 @@ bounded browser-state checks, semantic links and catalog regression tooling.
 
 ## Catalog implementation validation (2026-10-19)
 
-- TypeScript checks and all 68 offline tests pass.
+- TypeScript checks and all 77 offline tests pass, including media identity regressions.
 - `npm run test:catalog-browser` captured 37 desktop/mobile states across the three
   practice pages and verified generated singular/empty copy, all three mobile-menu
   accessible names, four sorted-date defects, responsive resources and screenshot replay.
@@ -18,11 +18,21 @@ bounded browser-state checks, semantic links and catalog regression tooling.
 - Case matching is not certification of correction quality or unseen-site accuracy.
   The dashboard run exposed a grouped currency-format duplicate retaining dollar
   symbols, alongside the correct per-plan euro fixes. Follow-up work: reconcile
-  grouped findings, stabilize media IDs across model wording changes, and improve
+  grouped findings and improve
   screenshot reliability and Business-row highlighting. Subtitle findings have
   textual evidence but no highlighted rendered element. One non-catalog translation
   finding also varied between major and minor severity across these runs.
 - Production code does not import the catalog; its examples are test-only.
+
+Media identity follow-up: `media-v2-*` IDs no longer hash model wording. They use
+asset/check identity and inspected-content/policy fingerprints. Offline audit tests
+verify that reworded evidence and reordered responses preserve review statuses,
+while changed content requires review. Multiple observations for the same
+asset/check are retained together; different checks remain separate. Legacy media
+IDs need one fresh review because they lack content fingerprints. Other agents'
+exact-quote identity and in-memory-only review persistence are unchanged. The live
+catalog runs above predate this identity change; no additional paid audit was run.
+
 Use Git history to identify the current commit and publication status.
 Remote: https://github.com/automatedguy/ai-assisted-web-qa-hackathon-main.
 Check Git status and recent commits before continuing; this is a point-in-time snapshot.

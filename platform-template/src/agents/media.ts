@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { QaIssue } from "../issues.js";
 import { fetchMediaResource, imageMime, parseCaptions, type MediaResource } from "./media-resources.js";
+import { mediaIssueId, type MediaCheck, type ResourceVersion } from "./media-identity.js";
 import { requestFindings } from "./model-check.js";
 import { WorkerFailure, type Agent } from "./types.js";
 
@@ -25,15 +26,31 @@ export const mediaAgent: Agent = {
     const assets: Asset[] = []; const images: Array<{ id: string; dataUrl: string }> = [];
     let visualBytes = 0; let resourceCount = 0;
     const cache = new Map<string, Promise<MediaResource>>();
-    const addIssue = (asset: Pick<Asset, "src" | "selector" | "elementType">, check: string, description: string, evidence: string,
-      expected: string, suggested_fix: string, severity: QaIssue["severity"] = "minor", confidence = 1) => {
-      const id = "media-" + createHash("sha256").update(JSON.stringify([page.url, asset.selector, check === "alt_language" ? "" : asset.src, check, evidence])).digest("hex").slice(0, 16);
-      if (!issues.some(issue => issue.id === id)) issues.push({ id, category: "media", severity, description,
+    const resourceVersions = new Map<string, ResourceVersion>();
+    const contributions = new Map<string, QaIssue[]>();
+    const addIssue = (asset: Asset, check: MediaCheck, description: string, evidence: string,
+      expected: string, suggested_fix: string, severity: QaIssue["severity"] = "minor", confidence = 1, facts?: unknown) => {
+      const id = mediaIssueId({ pageUrl: page.url, pageText: page.text, targetLocale: profile.locale.target_locale,
+        glossary: profile.glossary, asset, check, resource: resourceVersions.get(asset.src), facts });
+      const candidate: QaIssue = { id, category: "media", severity, description,
         assessment: { method: ["image_content", "image_text"].includes(check) ? "model_visual" :
-          ["alt_language", "caption_language"].includes(check) ? "model_text" : "deterministic" },
+          ["alt_language", "caption_language"].includes(check) ? "model_text" : "deterministic", check },
         evidence: `${asset.selector} · ${asset.src || "(missing URL)"}\n${evidence}`, expected, suggested_fix, confidence,
-        location: { page_url: page.url, element_type: asset.elementType, selector_or_xpath: asset.selector }, status: "new" });
-      const issue = issues.find(issue => issue.id === id);
+        location: { page_url: page.url, element_type: asset.elementType, selector_or_xpath: asset.selector }, status: "new" };
+      let issue = issues.find(issue => issue.id === id);
+      const parts = contributions.get(id) ?? [];
+      parts.push(candidate); contributions.set(id, parts);
+      if (!issue) { issue = { ...candidate }; issues.push(issue); }
+      else {
+        // One review unit per asset/check/content version. Retain every observation
+        // when the model splits that check into multiple findings, regardless of order.
+        for (const field of ["description", "evidence", "expected", "suggested_fix"] as const) {
+          issue[field] = [...new Set(parts.map(part => part[field] ?? ""))].sort().join("\n\n");
+        }
+        const severities = ["suggestion", "minor", "major", "critical"] as const;
+        issue.severity = severities[Math.max(...parts.map(part => severities.indexOf(part.severity)))];
+        issue.confidence = Math.min(...parts.map(part => part.confidence));
+      }
       const resource = page.rendered?.resources.find(item => item.selector === asset.selector && item.url === asset.src);
       if (issue && resource) issue.reproduction = resource.reproduction;
     };
@@ -51,6 +68,8 @@ export const mediaAgent: Agent = {
         const key = `${kind}:${asset.src}`;
         if (!cache.has(key)) cache.set(key, fetchMediaResource(asset.src, page.url, kind));
         const resource = await cache.get(key)!;
+        resourceVersions.set(asset.src, { status: resource.status, contentType: resource.contentType,
+          digest: createHash("sha256").update(resource.data).digest("hex") });
         if (resource.status < 200 || resource.status >= 300) {
           addIssue(asset, "http_error", "The media resource returned an unsuccessful HTTP response.", `HTTP ${resource.status}`,
             "An accessible media resource.", "Restore the asset or correct its URL.", "major");
@@ -105,7 +124,8 @@ export const mediaAgent: Agent = {
       if (captions.length && !captions.some(track => primaryLanguage(track.srclang) === targetLanguage)) {
         addIssue(base, "caption_metadata", "No caption/subtitle track declares the target language.",
           `Declared caption languages: ${captions.map(track => track.srclang || "(missing)").join(", ")}`,
-          `A caption/subtitle option for ${profile.locale.target_locale}.`, "Provide a target-language track and label it accurately.");
+          `A caption/subtitle option for ${profile.locale.target_locale}.`, "Provide a target-language track and label it accurately.",
+          "minor", 1, captions.map(track => ({ src: track.src, srclang: track.srclang, kind: track.kind })));
       }
       if (!captions.length) report.mediaChecks.push({ asset: video.selector, check: "caption presence", status: "completed",
         message: "No caption/subtitle tracks declared. Audio was not inspected, so caption necessity is undetermined." });

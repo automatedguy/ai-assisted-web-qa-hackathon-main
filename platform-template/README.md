@@ -320,6 +320,27 @@ against pixels and are explicitly labeled **Visual observation (model; review
 required)**. Findings name the asset URL and element XPath. Model failures retain
 independent metadata/resource findings and leave the worker failed.
 
+Media finding IDs (`media-v2-*`) use the page, element, resource and check type,
+plus a fingerprint of the inspected content and relevant policy/context. They do
+not depend on generated explanations, visual transcriptions, corrections,
+confidence, severity or response order. Rewording the same finding therefore
+preserves its verified/dismissed/escalated status on the next audit. Replaced
+image bytes at the same URL, changed captions/alt text or relevant policy/context
+changes require a fresh review. Visual checks conservatively include supplied
+page text in the fingerprint; selector changes also create a new identity.
+
+Each media check on an asset/content version is one review unit. Multiple model
+observations for that unit are retained together, using the highest severity and
+lowest confidence; different checks, elements and responsive assets remain
+separate. Alt-language findings share the img element's single alt attribute
+across responsive sources. The check type is exposed as `assessment.check`.
+
+Older media IDs have no content fingerprint and are not automatically matched to
+the new IDs: the first run after this change needs fresh media review decisions.
+This change addresses media identity; text checks still depend on exact evidence
+quotes, so changes in quote boundaries can produce new IDs. Review persistence
+remains in-memory and does not survive a server restart.
+
 Media fetches are restricted to the page's HTTP(S) origin, including redirects,
 with a 10-second timeout and three redirects. Bounds per page are 40 resource
 checks, eight image inputs and 16 MiB of attached image bytes. Each image is

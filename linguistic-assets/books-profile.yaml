@@ -1,0 +1,4 @@
+# Minimal test profile for https://books.toscrape.com/
+# British English is the chosen test criterion, not an official site policy.
+locale:
+  target_locale: "en-GB"

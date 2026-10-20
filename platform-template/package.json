@@ -8,7 +8,7 @@
     "dev": "node --env-file=../.env --import tsx --watch src/server.ts",
     "start": "node --import tsx src/server.ts",
     "typecheck": "tsc --noEmit",
-    "test": "QA_DISABLE_SCREENSHOTS=1 QA_DISABLE_BROWSER_CHECKS=1 node --import tsx --test test/*.test.ts",
+    "test": "node ../scripts/test.mjs",
     "test:activity-ui": "node test/activity-panel.browser.mjs",
     "test:report-ui": "node --import tsx test/html-report.browser.mjs",
     "test:configuration-ui": "node test/configuration.browser.mjs",

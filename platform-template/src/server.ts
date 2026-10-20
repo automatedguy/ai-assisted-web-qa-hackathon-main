@@ -270,7 +270,7 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
   response.status(500).json({ error: 'Could not complete the request. Check server logs and storage permissions.' });
 });
 
-const server = app.listen(port, "0.0.0.0", () => {
+const server = app.listen(port, process.env.HOST ?? "0.0.0.0", () => {
   console.log(`QA Platform listening on port ${port}`);
 });
 function shutdown() {
@@ -280,3 +280,4 @@ function shutdown() {
 }
 process.once('SIGINT', shutdown);
 process.once('SIGTERM', shutdown);
+process.on('message', message => { if (message === 'shutdown') shutdown(); });

@@ -1,7 +1,32 @@
 # Project Handoff
 
-Updated: 2026-10-19. Implementation: eight specialized agents, activity explanations,
+Updated: 2026-10-20. Implementation: eight specialized agents, activity explanations,
 bounded browser-state checks, semantic links and catalog regression tooling.
+
+## Installation validation (2026-10-20)
+
+New-user instructions: [Run on Windows, macOS or Linux](RUNNING.md).
+The repository-root launcher provides `npm run setup`, `npm start`,
+`npm run start:platform` and `npm run doctor`. Windows PowerShell uses `npm.cmd`.
+Setup uses the dependency lockfile, installs Chromium, preserves existing `.env`,
+and verifies the browser, input files and writable data directories without model calls.
+
+- A clean macOS ARM64 checkout in a path containing spaces installed successfully
+  with Node 22.18.0 and downloaded Playwright Chromium. The real browser launch and
+  screenshot diagnostic passed. Repeated setup preserved the existing `.env`.
+- Native installation tests passed against both the development and clean dependency
+  trees: site/dashboard startup, occupied-port rejection, shutdown, restart, saved
+  reviews/HTML exports, and platform-only mode, using isolated data and free ports.
+- All 107 offline tests and TypeScript checks passed with the portable test runner.
+- The Compose test built Linux ARM64 images, verified both service health checks,
+  captured a Chromium screenshot, crawled the practice site, reviewed/exported a
+  finding and uploaded/selected a profile. After `down` and container recreation,
+  the profile, selection, saved run, review and screenshot were retained in the volume.
+  Only the disposable test project's containers/network/volume were removed afterward.
+- `.github/workflows/portability.yml` defines Windows/macOS/Linux jobs for Node 22/24
+  and a Docker job. Hosted CI results, native Windows and Node 24 verification remain
+  pending until that workflow runs; local macOS and Linux-container success do not
+  certify those environments. No paid model audit was started for installation testing.
 
 ## Catalog implementation validation (2026-10-19)
 
@@ -122,8 +147,8 @@ run, or a supplied `baseline` ID. Missing findings are not claimed to be fixed.
 History requires Node 22.18+ (`nvm use`; root `.nvmrc`) and uses built-in SQLite,
 with no native npm dependency. Default storage is `platform-template/data/`;
 `QA_DATA_DIR` overrides it. Screenshots default to that directory's `screenshots/`
-subdirectory. Compose adds a persistent `qa-history` volume; end-to-end Docker
-volume validation remains pending. Use one server per data directory. Stop the
+subdirectory. Compose adds a persistent `qa-history` volume; end-to-end container
+recreation/persistence validation passed on 2026-10-20 (see above). Use one server per data directory. Stop the
 server before backing up/copying the whole directory. Never delete the volume to
 clear the UI. Node 22 can emit the built-in SQLite experimental warning.
 
@@ -222,10 +247,11 @@ unlisted model. Optional cached-input/cache-write rates are also supported.
 Unknown rates are not treated as free; incomplete usage produces a labeled
 known-usage subtotal. These estimates are not invoices.
 
-Alternatively, run `docker compose up --build` from the repository root. Compose
+Alternatively, run `docker compose up --build -d --wait` from the repository root. Compose
 starts both services and mounts profiles, reference content, and the issue schema.
-The Compose plugin was unavailable earlier on this machine; this updated Compose
-setup has not been exercised end to end.
+The local Docker CLI lacked Compose; installation testing used a checksum-verified,
+temporary official Compose executable. The updated setup passed end to end with
+isolated ports and volumes; the existing practice-site container was left running.
 
 Click **Run audit** to use the model; this sends page text and mapped reference
 Markdown, images, alt text and caption text to OpenAI and incurs API
@@ -298,7 +324,8 @@ ChatGPT account does not change the application's `.env` API credential.
 - The dashboard derives coverage from the coordinator registry and now exposes
   all eight available categories. Audits can now finish `completed` when workers
   succeed/skip and crawl coverage is complete; findings are not worker failures.
-- Docker Compose end-to-end validation remains pending.
+- Docker Compose end-to-end installation and persistence validation passed on
+  2026-10-20; hosted Windows/macOS/Linux CI execution remains pending.
 
 ## Known Limitations
 
@@ -332,7 +359,7 @@ ChatGPT account does not change the application's `.env` API credential.
 
 ## Next Task: Persistence Deployment Validation
 
-1. Validate Compose end to end, including container replacement with retained history/evidence.
+1. Run the portability CI matrix and review Windows/macOS/Linux results before distributing a release.
 2. Add explicit retention/export controls and an operational backup procedure.
 3. Add reviewer identity/authentication if the dashboard will be shared beyond the demo.
 

@@ -10,10 +10,18 @@ identify the matching selector/XPath or closest text block.
 
 ## Run locally
 
+For a new installation, follow **[Run on Windows, macOS or Linux](../docs/RUNNING.md)**.
+From the repository root, `npm run setup` installs dependencies and Chromium, and
+`npm start` starts both the practice site and dashboard. Windows PowerShell can use
+`npm.cmd` for these commands. `npm run doctor` checks local requirements without
+running an audit. Use `npm run start:platform` when the target site is already running.
+
+For development inside `platform-template/`:
+
 Use Node **22.18+** (`nvm use` from the repository root selects the pinned version).
 The history store uses [Node's built-in SQLite](https://nodejs.org/download/release/v22.18.0/docs/api/sqlite.html);
 Node 21 is no longer sufficient. Node 22 may print an experimental SQLite warning.
-From `platform-template/`, run `npm install` and `npm run dev`, then open
+From `platform-template/`, run `npm ci` and `npm run dev`, then open
 http://localhost:3000. The development script loads the repository-root `.env`.
 The practice site must be running at `SITE_URL` (default http://localhost:8080).
 
@@ -565,8 +573,9 @@ unimplemented, a worker fails, or crawl/browser coverage is incomplete. **Comple
 the run finished without those failures; inspect worker skips and media limitations
 to understand what was actually checked. Findings themselves do not make a run partial.
 
-Next milestones are Docker volume validation, retention controls and an unseen-input
-rehearsal. External links and dedicated destination-language checks remain pending.
+Installation and Docker persistence checks are described in [the running guide](../docs/RUNNING.md).
+Next milestones are retention controls and an unseen-input rehearsal. External links
+and dedicated destination-language checks remain pending.
 Page agents skip non-success responses,
 and pages over 24,000 characters fail their model step visibly until chunking
 is added. Contextual locale/formatting checks depend on model judgment and need

@@ -68,17 +68,25 @@ specific practice site itself.
 
 ## Getting started
 
-```
-docker compose up --build
+Install Node.js 22.18+ (latest 22.x recommended), then run these commands from the
+repository root. **Docker is optional.**
+
+```sh
+npm run setup
+npm start
 ```
 
-This starts the practice site on `http://localhost:8080` and the platform
-dashboard on `http://localhost:3000`. The platform requires `OPENAI_API_KEY`
-for model-backed audits; copy `.env.example` to `.env` and configure it first.
+On Windows PowerShell, use `npm.cmd run setup` and `npm.cmd start`.
+On Linux, use `npm run setup -- --with-deps` to install Chromium system dependencies.
+Setup creates `.env` without overwriting an existing file. Add `OPENAI_API_KEY`
+before starting for model-backed audits, or leave it empty for link-only checks.
+Startup runs both the practice site at `http://localhost:8080` and the dashboard
+at `http://localhost:3000`. Ctrl+C stops both; saved results survive restart.
 
-See `platform-template/README.md` for the exact contract your platform
-must satisfy so organizers can swap in the demo site without touching your
-code.
+See **[Run on Windows, macOS or Linux](docs/RUNNING.md)** for installation, diagnostics,
+custom ports, Docker, backups and troubleshooting. Run `npm run doctor` to check the
+installation without a paid audit. [Platform documentation](platform-template/README.md)
+describes checks and the contract for swapping demo inputs without code changes.
 
 
 # Check Catalog
